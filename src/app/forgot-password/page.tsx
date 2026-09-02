@@ -1,0 +1,11 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { API_BASE } from "@/lib/config";
+
+export default function ForgotPasswordPage() {
+  const [message, setMessage] = useState(""); const [devToken, setDevToken] = useState(""); const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); const email = String(new FormData(event.currentTarget).get("email")); try { const response = await fetch(`${API_BASE}/api/v1/auth/password/forgot`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Unable to request a password reset."); setMessage(data.status); setDevToken(data.dev_token || ""); } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to request a password reset."); } }
+  return <main className="grid min-h-screen place-items-center bg-slate-50 p-6"><form onSubmit={submit} className="w-full max-w-md rounded-3xl bg-white p-7 shadow-sm"><p className="text-xs font-bold uppercase tracking-[.18em] text-teal-600">Account recovery</p><h1 className="mt-2 text-3xl font-bold">Reset your password</h1><p className="mt-2 text-sm text-slate-500">Enter your email address and we will send reset instructions if an account exists.</p>{error && <p className="mt-5 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}{message && <p className="mt-5 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}{devToken && <p className="mt-3 break-all rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Development reset token: {devToken}. <Link className="font-bold underline" href={`/reset-password?token=${encodeURIComponent(devToken)}`}>Continue</Link></p>}<label className="mt-5 block text-xs font-bold text-slate-600">Email address<input name="email" type="email" required className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm" /></label><button className="mt-5 w-full rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white">Send reset instructions</button><Link href="/login" className="mt-5 block text-center text-sm font-bold text-teal-700">Back to sign in</Link></form></main>;
+}

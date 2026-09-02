@@ -1,0 +1,211 @@
+@import "tailwindcss";
+
+:root {
+  --tenant-primary: #0d9488;
+  --tenant-secondary: #0f172a;
+  --tenant-primary-strong: color-mix(in srgb, var(--tenant-primary) 88%, #000);
+  --tenant-primary-soft: color-mix(in srgb, var(--tenant-primary) 10%, #fff);
+  --tenant-primary-muted: color-mix(in srgb, var(--tenant-primary) 18%, #fff);
+  --tenant-primary-border: color-mix(in srgb, var(--tenant-primary) 32%, #fff);
+  --tenant-secondary-soft: color-mix(in srgb, var(--tenant-secondary) 8%, #fff);
+  --tenant-secondary-strong: color-mix(in srgb, var(--tenant-secondary) 88%, #000);
+  /* Tailwind's existing teal utilities become the tenant accent everywhere. */
+  --color-teal-50: var(--tenant-primary-soft);
+  --color-teal-100: color-mix(in srgb, var(--tenant-primary) 15%, #fff);
+  --color-teal-200: var(--tenant-primary-border);
+  --color-teal-300: color-mix(in srgb, var(--tenant-primary) 54%, #fff);
+  --color-teal-400: color-mix(in srgb, var(--tenant-primary) 78%, #fff);
+  --color-teal-500: var(--tenant-primary);
+  --color-teal-600: var(--tenant-primary);
+  --color-teal-700: var(--tenant-primary-strong);
+  --color-teal-800: color-mix(in srgb, var(--tenant-primary) 78%, #000);
+  --color-teal-900: color-mix(in srgb, var(--tenant-primary) 64%, #000);
+  --surface: #f8fafc;
+}
+
+* { box-sizing: border-box; }
+html { max-width: 100%; overflow-x: clip; background: var(--surface); }
+body { max-width: 100%; margin: 0; overflow-x: clip; background: var(--surface); color: #172033; font-family: Arial, Helvetica, sans-serif; }
+img, video, canvas, svg { max-width: 100%; }
+main, section, article, form, fieldset { min-width: 0; }
+p, h1, h2, h3, td, th, li { overflow-wrap: anywhere; }
+button, input, select { font: inherit; }
+::selection { background: color-mix(in srgb, var(--tenant-primary) 25%, white); }
+.app-grid { background-image: linear-gradient(to right, color-mix(in srgb, var(--tenant-primary) 7%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--tenant-secondary) 5%, transparent) 1px, transparent 1px); background-size: 32px 32px; }
+.scrollbar-hidden { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hidden::-webkit-scrollbar { display: none; }
+
+/* Tenant-wide visual language. Existing pages use Tailwind's teal utility
+   families, so these rules map that established semantic accent to the active
+   tenant without altering warning, error, or success states. */
+.tenant-shell > aside {
+  border-color: var(--tenant-primary-border);
+  background: linear-gradient(180deg, #fff 0%, var(--tenant-primary-soft) 210%);
+}
+
+.tenant-shell > main > header {
+  border-color: var(--tenant-primary-border);
+  background: color-mix(in srgb, #fff 91%, var(--tenant-secondary));
+}
+
+.tenant-shell > aside > div:first-child {
+  border-color: var(--tenant-primary-border);
+  background: linear-gradient(135deg, var(--tenant-primary-soft), #fff 58%);
+}
+
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--tenant-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+/* Slate hero/header surfaces become tenant-secondary surfaces. Exact class
+   matching intentionally excludes translucent modal backdrops such as
+   bg-slate-950/40, which must retain their neutral overlay treatment. */
+[class~="bg-slate-950"], [class~="bg-slate-900"][class~="text-white"] {
+  background-color: var(--tenant-secondary) !important;
+}
+
+.tenant-shell [data-tenant-brand] { color: var(--tenant-secondary-strong); }
+
+/* Workspace pages share one readable but spacious content measure. Older
+   clinical and configuration routes used one-off narrow containers; making
+   the rule here keeps them aligned with the current 1440px workspace layout
+   while intentionally leaving public pages and dialog panels untouched. */
+.tenant-shell .app-grid > :is(
+  [class~="max-w-xs"],
+  [class~="max-w-sm"],
+  [class~="max-w-md"],
+  [class~="max-w-lg"],
+  [class~="max-w-xl"],
+  [class~="max-w-2xl"],
+  [class~="max-w-3xl"],
+  [class~="max-w-4xl"],
+  [class~="max-w-5xl"],
+  [class~="max-w-6xl"],
+  [class~="max-w-[1000px]"],
+  [class~="max-w-[1050px]"],
+  [class~="max-w-[1100px]"],
+  [class~="max-w-[1120px]"],
+  [class~="max-w-[1150px]"],
+  [class~="max-w-[1200px]"]
+  , [class~="max-w-[1280px]"]
+) {
+  max-width: 1440px !important;
+}
+
+/* Workflow forms need room for patient, prescription, diagnostic and billing
+   context. Within a tenant workspace they become full content-area pages,
+   preserving the sidebar and application header instead of covering them. */
+.tenant-shell div.fixed.inset-0.z-50,
+.tenant-shell div.fixed.inset-0.z-\[60\] {
+  padding: 0;
+  place-items: stretch;
+}
+
+.tenant-shell div.fixed.inset-0.z-50 > :is(form, div),
+.tenant-shell div.fixed.inset-0.z-\[60\] > :is(form, div) {
+  width: 100%;
+  min-height: 100%;
+  max-width: none !important;
+  max-height: none !important;
+  overflow-y: auto;
+  border-radius: 0 !important;
+}
+
+@media (min-width: 1024px) {
+  .tenant-shell div.fixed.inset-0.z-50,
+  .tenant-shell div.fixed.inset-0.z-\[60\] {
+    top: 5rem;
+    right: 0;
+    bottom: 0;
+    left: 18rem;
+    padding: 1.5rem 2rem;
+    background: var(--surface) !important;
+  }
+
+  .tenant-shell div.fixed.inset-0.z-50 > :is(form, div),
+  .tenant-shell div.fixed.inset-0.z-\[60\] > :is(form, div) {
+    min-height: 0;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 1.5rem !important;
+    box-shadow: 0 20px 45px rgb(15 23 42 / 8%);
+  }
+}
+
+/* Operational tables retain all columns on small screens without widening the
+   page. They scroll within their own region, which is safer than clipping
+   financial and clinical data or forcing unreadably narrow columns. */
+table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 639px) {
+  .tenant-shell > main > header { min-height: 4.5rem; }
+  .tenant-shell > main > .app-grid { padding: 1.25rem 1rem; }
+  .tenant-shell .rounded-3xl { border-radius: 1.25rem; }
+  .tenant-shell .app-grid > * { min-width: 0; }
+  .tenant-shell .app-grid > :where(main, div) > header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .tenant-shell .app-grid > :where(main, div) > header > :last-child {
+    flex-wrap: wrap;
+  }
+}
+
+/* Shared native-select treatment.  Keeping the native control preserves
+   keyboard, screen-reader, and mobile picker behaviour while making every
+   dropdown feel like part of the application rather than browser chrome. */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  min-height: 2.75rem;
+  cursor: pointer;
+  padding-right: 2.75rem !important;
+  border-color: #e2e8f0;
+  color: #334155;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%2364758b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 1rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+select:not([multiple]):not([size]):hover:not(:disabled) {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+select:not([multiple]):not([size]):focus {
+  outline: none;
+  border-color: var(--tenant-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary) 16%, transparent);
+  background-color: #ffffff;
+}
+
+select:disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background-color: #f8fafc;
+  opacity: 1;
+}
+
+/* Multiple-select fields use a scrolling native list intentionally. */
+select[multiple], select[size] {
+  border-color: #cbd5e1;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  color: #334155;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+select[multiple]:focus, select[size]:focus {
+  outline: none;
+  border-color: var(--tenant-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary) 16%, transparent);
+}
