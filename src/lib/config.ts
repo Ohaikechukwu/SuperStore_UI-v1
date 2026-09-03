@@ -19,7 +19,7 @@ export const DEFAULT_TENANT = process.env.NEXT_PUBLIC_TENANT_KEY ?? "";
  */
 export function apiRequestHeaders(apiBase: string, headers?: HeadersInit): Headers {
   const result = new Headers(headers);
-  if (apiBase === "/edge-api" || /^https:\/\/[^/]+\.ngrok-free\.app(?:\/|$)/i.test(apiBase)) {
+  if (apiBase === "/edge-api" || apiBase.startsWith("/edge-api/") || /^https:\/\/[^/]+\.ngrok-free\.app(?:\/|$)/i.test(apiBase)) {
     result.set("ngrok-skip-browser-warning", "1");
   }
   return result;
