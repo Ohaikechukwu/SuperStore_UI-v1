@@ -1,13 +1,17 @@
 "use client";
 
-import { Children, isValidElement, type ChangeEvent, type ReactNode, useEffect, useState } from "react";
+import { Children, Fragment, isValidElement, type ChangeEvent, type ReactNode, useEffect, useState } from "react";
 import AppSelect, { type AppSelectOption } from "@/components/app-select";
 
 type FormSelectProps = React.SelectHTMLAttributes<HTMLSelectElement>;
 
 function optionsFrom(children: ReactNode): AppSelectOption[] {
   return Children.toArray(children).flatMap((item) => {
-    if (!isValidElement(item) || item.type !== "option") return [];
+    if (!isValidElement(item)) return [];
+    // A native select renders options nested in fragments; match that here,
+    // otherwise an extracted options variable renders as an empty dropdown.
+    if (item.type === Fragment) return optionsFrom((item.props as { children?: ReactNode }).children);
+    if (item.type !== "option") return [];
     const props = item.props as { value?: string | number; children?: ReactNode; disabled?: boolean };
     return [{ value: String(props.value ?? props.children ?? ""), label: String(props.children ?? ""), disabled: props.disabled }];
   });
