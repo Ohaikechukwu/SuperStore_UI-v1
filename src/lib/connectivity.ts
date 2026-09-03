@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { API_BASE } from "@/lib/config";
+import { API_BASE, apiRequestHeaders } from "@/lib/config";
 
 export const CONNECTIVITY_EVENT = "superstore:api-connectivity";
 const CHECK_INTERVAL_MS = 10_000;
@@ -32,13 +32,16 @@ export async function apiIsReachable() {
     try {
       const response = await fetch(`${API_BASE}/health/ready`, {
         cache: "no-store",
+        headers: apiRequestHeaders(API_BASE),
         signal: controller.signal,
       });
       if (!response.ok) {
         reportApiReachability(false);
         return false;
       }
-      const syncStatus = await fetch(`${API_BASE}/api/v1/edge/status`, { cache: "no-store", signal: controller.signal })
+      const syncStatus = await fetch(`${API_BASE}/api/v1/edge/status`, {
+        cache: "no-store", headers: apiRequestHeaders(API_BASE), signal: controller.signal,
+      })
         .then(async (item) => item.ok ? item.json() as Promise<{ cloud?: string }> : null)
         .catch(() => null);
       const online = syncStatus?.cloud !== "offline";
