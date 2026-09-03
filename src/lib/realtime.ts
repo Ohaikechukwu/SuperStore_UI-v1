@@ -49,7 +49,13 @@ export function useRealtimeEvents(onEvent: (event: RealtimeEvent) => void, enabl
             headers: { authorization: `Bearer ${token}`, accept: "text/event-stream" },
             credentials: "include", cache: "no-store", signal: controller.signal,
           });
-          if (!response.ok || !response.body) throw new Error(`live events unavailable (${response.status})`);
+          if (!response.ok || !response.body) {
+            // A 401 with a token still in memory means the token expired
+            // between reconnects; refresh once before the next attempt,
+            // otherwise the loop reuses the same dead token forever.
+            if (response.status === 401 && accessToken()) await refreshSession(API_BASE);
+            throw new Error(`live events unavailable (${response.status})`);
+          }
           retryDelay = 1000;
           const reader = response.body.getReader();
           const decoder = new TextDecoder();

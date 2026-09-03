@@ -172,6 +172,7 @@ export default function Page() {
   const [discount, setDiscount] = useState("0");
   const [discountReason, setDiscountReason] = useState("");
   const [taxRate, setTaxRate] = useState("0");
+  const [approvedTaxRates, setApprovedTaxRates] = useState<{ name: string; rate: string }[]>([]);
   const [priceOverrideReason, setPriceOverrideReason] = useState("");
   const [showCustomer, setShowCustomer] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -326,6 +327,13 @@ export default function Page() {
     void refreshSales();
     void refreshHeldSales();
   }, [refreshHeldSales, refreshSales]);
+  useEffect(() => {
+    let alive = true;
+    void api.get<{ name: string; rate: string }[]>("/api/v1/taxes")
+      .then((rates) => { if (alive) setApprovedTaxRates(rates); })
+      .catch(() => { if (alive) setApprovedTaxRates([]); });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     if (!showSession || !session) return;
     let alive = true;
@@ -1022,7 +1030,7 @@ export default function Page() {
                 {can(authorization, "sales.discount") && <div className="mt-3 grid gap-2 sm:grid-cols-2"><input value={discount} onChange={(event) => setDiscount(event.target.value)} type="number" min="0" max={subtotal} step="0.01" placeholder="Discount amount" className="rounded-xl border border-slate-600 bg-white/10 px-3 py-2 text-sm font-bold text-white placeholder:text-slate-400" /><input value={discountReason} onChange={(event) => setDiscountReason(event.target.value)} placeholder="Discount reason" className="rounded-xl border border-slate-600 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400" /></div>}
                 {customerId && customerLoyalty?.program.active && <div className="mt-3 rounded-xl border border-teal-300/30 bg-teal-400/10 p-3"><div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-teal-100">Loyalty balance: {customerLoyalty.points_balance} points</span><span className="text-xs text-teal-200">{customerLoyalty.program.redemption_value_per_point} per point</span></div><input value={loyaltyPointsToRedeem} onChange={(event) => setLoyaltyPointsToRedeem(event.target.value)} type="number" min="0" max={customerLoyalty.points_balance} step="0.001" placeholder="Points to redeem" className="mt-2 w-full rounded-lg border border-teal-300/30 bg-white/10 px-3 py-2 text-sm font-bold text-white placeholder:text-teal-100" />{loyaltyDiscountValue > 0 && <p className="mt-2 text-xs font-bold text-teal-100">Loyalty saving: −{formatMoney(loyaltyDiscountValue)}</p>}</div>}
                 {cart.some((line) => line.unit_price !== line.selling_price) && <input value={priceOverrideReason} onChange={(event) => setPriceOverrideReason(event.target.value)} placeholder="Price override reason" className="mt-2 w-full rounded-xl border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-sm text-white placeholder:text-amber-100" />}
-                <div className="mt-2 flex items-center justify-between gap-3 text-sm text-slate-300"><span>VAT / tax</span><label className="flex items-center gap-2"><input value={taxRate} onChange={(event) => setTaxRate(event.target.value)} type="number" min="0" max="100" step="0.001" className="w-16 rounded-lg border border-slate-600 bg-white/10 px-2 py-1 text-right text-xs font-bold text-white" />%</label><span>{formatMoney(taxAmount)}</span></div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-sm text-slate-300"><span>VAT / tax</span><label className="flex items-center gap-2"><select value={taxRate} onChange={(event) => setTaxRate(event.target.value)} className="rounded-lg border border-slate-600 bg-white/10 px-2 py-1 text-xs font-bold text-white"><option value="0">None</option>{approvedTaxRates.map((rate) => <option key={rate.name} value={String(rate.rate)}>{rate.name} {rate.rate}%</option>)}</select></label><span>{formatMoney(taxAmount)}</span></div>
                 {discountValue > 0 && <div className="mt-2 flex justify-between text-sm text-amber-200"><span>Discount</span><span>−{formatMoney(discountValue)}</span></div>}
                 <div className="mt-2 flex justify-between text-3xl font-bold tracking-tight">
                   <span>Total</span>

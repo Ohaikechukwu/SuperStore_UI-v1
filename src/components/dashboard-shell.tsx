@@ -271,7 +271,7 @@ export default function DashboardShell({ children, title, subtitle }: { children
   const syncStyle = !connected || ["review", "blocked"].includes(syncState.phase)
     ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700";
 
-  function logout() { const tenantSignIn = tenantLoginPath(); const signOutPath = isPlatformConsoleRoute && platformConsoleBase ? `${platformConsoleBase}/login` : tenantSignIn.replace(/\/login$/, "/logout"); void apiFetch(API_BASE, "/api/v1/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearTokens({ resetTheme: !signOutPath.endsWith("/logout") }); router.replace(signOutPath); }); }
+  function logout() { const tenantSignIn = tenantLoginPath(); const signOutPath = isPlatformConsoleRoute && platformConsoleBase ? `${platformConsoleBase}/login` : tenantSignIn.replace(/\/login$/, "/logout"); void apiFetch(API_BASE, "/api/v1/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearTokens({ resetTheme: !signOutPath.endsWith("/logout"), purgeData: true }); router.replace(signOutPath); }); }
 
   if (platformDenied) return <main className="grid min-h-screen place-items-center bg-slate-50 p-6"><section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><p className="text-6xl font-bold tracking-tight text-slate-900">404</p><h1 className="mt-4 text-xl font-bold">Page not found</h1><p className="mt-2 text-sm text-slate-500">The page you requested could not be found.</p><Link href="/" className="mt-6 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white">Return home</Link></section></main>;
 

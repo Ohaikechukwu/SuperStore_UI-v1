@@ -51,12 +51,19 @@ export function saveTokens(tokens: TokenPair) {
   if (tokens.tenant_public_id) saveTenantPublicId(tokens.tenant_public_id);
 }
 
-export function clearTokens({ resetTheme = true }: { resetTheme?: boolean } = {}) {
-  // Service-worker route shells and IndexedDB queues are tenant-bound.  A
-  // sign-out is an explicit privacy boundary, so do not leave prior work for
-  // the next person using this browser.
-  navigator.serviceWorker?.controller?.postMessage({ type: "superstore:purge-offline-data" });
-  void import("@/offlineQueue").then(({ clearOfflineData }) => clearOfflineData()).catch(() => undefined);
+export function clearTokens({ resetTheme = true, purgeData = false }: { resetTheme?: boolean; purgeData?: boolean } = {}) {
+  // Clearing tokens alone (expired refresh, denied request) must never destroy
+  // queued offline work: a transient refresh failure is recoverable by signing
+  // in again, but deleted POS sales are gone. Only an explicit sign-out passes
+  // purgeData — a deliberate privacy boundary, not a session failure handler.
+  if (purgeData) {
+    // Prefer the active registration: the controller may not exist yet on
+    // first load, and the registration survives that early window.
+    navigator.serviceWorker?.ready.then((registration) => {
+      registration.active?.postMessage({ type: "superstore:purge-offline-data" });
+    }).catch(() => navigator.serviceWorker?.controller?.postMessage({ type: "superstore:purge-offline-data" }));
+    void import("@/offlineQueue").then(({ clearOfflineData }) => clearOfflineData()).catch(() => undefined);
+  }
   memoryAccessToken = null;
   storage().removeItem(SESSION_ACCESS_KEY);
   window.sessionStorage.removeItem(SESSION_AUTHORIZATION_KEY);
@@ -152,7 +159,9 @@ async function performRefresh(apiBase: string) {
     body: "{}",
   });
   if (!response.ok) {
-    clearTokens();
+    // Tokens are cleared but no data is purged: a failed refresh may be a
+    // transient outage, and queued work survives until an explicit sign-out.
+    clearTokens({ purgeData: false });
     return false;
   }
   saveTokens(await response.json());
@@ -161,10 +170,18 @@ async function performRefresh(apiBase: string) {
 
 // A page can mount several data loaders at once. Refresh tokens rotate on use,
 // so all of those loaders must await the same refresh rather than racing each
-// other with the old cookie.
+// other with the old cookie. The lock spans browser tabs: the rotating refresh
+// cookie is shared, so without cross-tab coordination whichever tab refreshes
+// second presents an already-rotated cookie and silently signs the user out.
 export function refreshSession(apiBase: string) {
   if (!refreshInFlight) {
-    refreshInFlight = performRefresh(apiBase).finally(() => {
+    const run = async () => {
+      if (typeof navigator !== "undefined" && navigator.locks) {
+        return navigator.locks.request("superstore:refresh", async () => performRefresh(apiBase));
+      }
+      return performRefresh(apiBase);
+    };
+    refreshInFlight = run().finally(() => {
       refreshInFlight = null;
     });
   }
@@ -183,6 +200,9 @@ export async function apiFetch(apiBase: string, path: string, init: RequestInit 
     headers.set("authorization", `Bearer ${accessToken()}`);
     response = await fetchWithTimeout(`${apiBase}${path}`, { ...init, headers, credentials: "include" }, timeoutMs);
   }
-  if (response.status === 401) clearTokens();
+  // A 401 here means the endpoint denied the fresh token — an authorization
+  // problem, not a session loss. performRefresh already cleared tokens when
+  // the refresh itself failed, so clearing again (and purging data with the
+  // old semantics) is both wrong and destructive.
   return response;
 }
