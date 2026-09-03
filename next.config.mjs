@@ -6,6 +6,12 @@ const legacyPublicApiUrl = process.env.NEXT_PUBLIC_API_URL;
 const apiUpstream = process.env.EDGE_API_UPSTREAM
   ?? (/^https?:\/\//i.test(legacyPublicApiUrl ?? "") ? legacyPublicApiUrl : undefined);
 
+if (legacyPublicApiUrl === "/edge-api" && !apiUpstream) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL=/edge-api requires EDGE_API_UPSTREAM to be set when the frontend is built.",
+  );
+}
+
 const nextConfig = {
   async headers() {
     return [{
