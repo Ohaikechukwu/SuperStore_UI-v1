@@ -5,7 +5,7 @@
  * are owned by the application and are separately scoped to the signed-in
  * tenant/user.  This worker only retains static assets and safe route shells.
  */
-const VERSION = "2026-09-02-1";
+const VERSION = "2026-09-03-1";
 const STATIC_CACHE = `superstore-static-${VERSION}`;
 const RUNTIME_CACHE = `superstore-runtime-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
@@ -39,9 +39,22 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+
+  // ngrok's free-tier browser interstitial is an HTML response without the
+  // API's CORS headers. Requests initiated by a controlled client still pass
+  // through this worker, so attach ngrok's documented opt-out header before
+  // forwarding every method to the temporary API endpoint. Do not cache it.
+  if (url.origin !== self.location.origin) {
+    if (url.hostname.endsWith(".ngrok-free.app") && url.pathname.startsWith("/api/")) {
+      const headers = new Headers(request.headers);
+      headers.set("ngrok-skip-browser-warning", "1");
+      event.respondWith(fetch(new Request(request, { headers })));
+    }
+    return;
+  }
+
+  if (request.method !== "GET") return;
   // Never cache API traffic, including same-origin Next rewrites.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/edge-api/")) return;
 
@@ -58,7 +71,12 @@ self.addEventListener("fetch", (event) => {
 
   if (url.pathname.startsWith("/_next/static/") || url.pathname === "/icon.svg") {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone())));
+      // Clone before returning the response to the browser. Deferring clone()
+      // until the cache opens races the browser's body consumption.
+      if (response.ok) {
+        const cacheCopy = response.clone();
+        event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, cacheCopy)));
+      }
       return response;
     })));
   }
