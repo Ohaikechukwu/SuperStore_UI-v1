@@ -78,5 +78,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  // edge-api and sw.js are same-origin infrastructure, never page routes:
+  // the tenant-cookie redirect below would otherwise rewrite API calls to
+  // /t/<id>/edge-api/..., where the path-scoped refresh cookie does not match
+  // and every session silently dies on the next refresh.
+  matcher: ["/((?!api|edge-api|_next/static|_next/image|favicon.ico|icon.svg|sw.js).*)"],
 };
