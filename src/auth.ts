@@ -1,4 +1,5 @@
 import { resetPlatformTheme } from "@/tenantTheme";
+import { apiRequestHeaders } from "@/lib/config";
 
 export type TokenPair = {
   access_token: string;
@@ -23,7 +24,11 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, {
+      ...init,
+      headers: apiRequestHeaders(String(input), init.headers),
+      signal: controller.signal,
+    });
   } finally {
     window.clearTimeout(timer);
   }
