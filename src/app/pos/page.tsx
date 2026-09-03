@@ -287,7 +287,7 @@ export default function Page() {
   }, [notice, toast]);
   useEffect(() => {
     void api.get<AuthorizationContext>("/api/v1/auth/me/authorization")
-      .then((context) => { setAuthorization(context); setCanManageCashPoints(["admin", "platform_admin", "platform_super_admin"].includes(context.role)); })
+      .then((context) => { setAuthorization(context); setCanManageCashPoints(["owner", "admin", "platform_admin", "platform_super_admin"].includes(context.role)); })
       .catch(() => { setAuthorization(null); setCanManageCashPoints(false); });
   }, []);
   useEffect(() => {
