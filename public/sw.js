@@ -5,7 +5,7 @@
  * are owned by the application and are separately scoped to the signed-in
  * tenant/user.  This worker only retains static assets and safe route shells.
  */
-const VERSION = "2026-09-03-1";
+const VERSION = "2026-09-03-2";
 const STATIC_CACHE = `superstore-static-${VERSION}`;
 const RUNTIME_CACHE = `superstore-runtime-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
@@ -41,16 +41,11 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // ngrok's free-tier browser interstitial is an HTML response without the
-  // API's CORS headers. Requests initiated by a controlled client still pass
-  // through this worker, so attach ngrok's documented opt-out header before
-  // forwarding every method to the temporary API endpoint. Do not cache it.
+  // Never proxy or modify cross-origin requests. In particular, adding
+  // ngrok's opt-out header here turns a browser request into a CORS
+  // preflight, which a free ngrok endpoint can reject before the API sees it.
+  // Production browser traffic uses the same-origin /edge-api rewrite.
   if (url.origin !== self.location.origin) {
-    if (url.hostname.endsWith(".ngrok-free.app") && url.pathname.startsWith("/api/")) {
-      const headers = new Headers(request.headers);
-      headers.set("ngrok-skip-browser-warning", "1");
-      event.respondWith(fetch(new Request(request, { headers })));
-    }
     return;
   }
 

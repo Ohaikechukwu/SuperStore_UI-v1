@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const SERVICE_WORKER_REVISION = "2026-09-03-1";
+const SERVICE_WORKER_REVISION = "2026-09-03-2";
 
 /** Registers the offline shell only in deployable browser contexts. */
 export default function PwaRegistration() {
