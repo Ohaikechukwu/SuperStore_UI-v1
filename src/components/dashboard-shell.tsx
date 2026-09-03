@@ -112,6 +112,7 @@ const platformConsoleNav: NavItem[] = [
   { label: "Command centre", href: "/platform/tenants", icon: Building2 },
   { label: "Tenant portal IDs", href: "/platform/tenant-portals", icon: KeyRound },
   { label: "Plans & licensing", href: "/platform/plans", icon: CreditCard },
+  { label: "Subscription payments", href: "/platform/payments", icon: ReceiptText },
   { label: "Platform activity", href: "/platform/activity", icon: ClipboardList },
   { label: "Store nodes", href: "/platform/store-nodes", icon: Monitor },
 ];
