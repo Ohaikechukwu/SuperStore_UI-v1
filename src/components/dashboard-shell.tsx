@@ -210,7 +210,9 @@ export default function DashboardShell({ children, title, subtitle }: { children
         else saveTenantPublicId(authorization.tenant_public_id);
       }
       const profileResponse = await apiFetch(API_BASE, "/api/v1/auth/me").catch(() => null);
-      if (profileResponse?.ok && active) setProfile(await profileResponse.json());
+      if (profileResponse?.ok && profileResponse.headers.get("content-type")?.includes("application/json") && active) {
+        setProfile(await profileResponse.json());
+      }
       // The authenticated session supplies the opaque public tenant ID used by
       // the same resolver as the pre-login route.
       if (authorization.tenant_public_id && active && !isPlatformConsoleRoute) {

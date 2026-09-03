@@ -24,11 +24,22 @@ async function messageFrom(response: Response) {
   }
 }
 
+async function jsonFrom<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new ApiError(
+      response.status,
+      "The API returned HTML instead of JSON. Check the /edge-api proxy and the deployed frontend version.",
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(API_BASE, path, init);
   if (!response.ok) throw new ApiError(response.status, await messageFrom(response));
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  return jsonFrom<T>(response);
 }
 
 function filenameFromDisposition(value: string | null, fallback: string) {
