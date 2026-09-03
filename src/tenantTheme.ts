@@ -24,7 +24,9 @@ export type TenantTheme = {
 
 const PLATFORM_TITLE = "Superstore Health Suite";
 const PLATFORM_FAVICON = "/icon.svg";
-const THEME_REQUEST_TIMEOUT_MS = 8_000;
+// Wide enough for a remote tunnel (ngrok) whose baseline round trip can
+// already exceed six seconds before any queuing.
+const THEME_REQUEST_TIMEOUT_MS = 20_000;
 
 // This is deliberately memory-only. A tenant theme must be obtained from the
 // backend for the currently selected tenant or authenticated session; it must
