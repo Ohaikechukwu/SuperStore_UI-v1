@@ -288,7 +288,11 @@ export default function Page() {
   }, [notice, toast]);
   useEffect(() => {
     void api.get<AuthorizationContext>("/api/v1/auth/me/authorization")
-      .then((context) => { setAuthorization(context); setCanManageCashPoints(["owner", "admin", "platform_admin", "platform_super_admin"].includes(context.role)); })
+      .then((context) => {
+        setAuthorization(context);
+        // Capability-driven, same code the API enforces on cash-point writes.
+        setCanManageCashPoints(can(context, "pos.cash_points.manage"));
+      })
       .catch(() => { setAuthorization(null); setCanManageCashPoints(false); });
   }, []);
   useEffect(() => {

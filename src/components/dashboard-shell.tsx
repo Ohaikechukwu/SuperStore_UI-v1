@@ -94,11 +94,11 @@ const navItems: NavItem[] = [
     { label: "Payroll & loans", href: "/payroll", icon: WalletCards, permission: "payroll.read" },
     { label: "Tenant payment setup", href: "/settings/payment", icon: CreditCard, permission: "accounting.manage" },
   ] },
-  { label: "Administration", href: "/settings", icon: Settings, anyPermissions: ["reports.read", "sync.commands.read", "audit.read", "users.read"], children: [
+  { label: "Administration", href: "/settings", icon: Settings, anyPermissions: ["reports.read", "sync.commands.read", "audit.read", "users.administer"], children: [
     { label: "Reports", href: "/reports", icon: BarChart3, permission: "reports.read" },
     { label: "Sync center", href: "/sync", icon: RefreshCw, permission: "sync.commands.read" },
     { label: "Security & audit", href: "/security", icon: ShieldCheck, permission: "audit.read" },
-    { label: "People & access", href: "/people", icon: Users, permission: "users.read" },
+    { label: "People & access", href: "/people", icon: Users, permission: "users.administer" },
     { label: "Settings", href: "/settings", icon: Settings },
     { label: "Payment setup", href: "/settings/payment", icon: CreditCard, permission: "accounting.manage" },
     { label: "HMO setup", href: "/settings/hmo", icon: ShieldCheck, permission: "hospital.billing.approve", module: "hospital" },

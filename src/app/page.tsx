@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowUpRight, Banknote, Boxes, CircleDollarSign, Clipboa
 import DashboardShell from "@/components/dashboard-shell";
 import AppSelect from "@/components/app-select";
 import { api, ApiError } from "@/lib/api";
-import { loadAuthorizationContext, readCachedAuthorizationContext, type AuthorizationContext } from "@/lib/authorization";
+import { can, loadAuthorizationContext, readCachedAuthorizationContext, type AuthorizationContext } from "@/lib/authorization";
 import { formatMoney, formatQuantity } from "@/lib/ui";
 
 type Branch = { id: string; name: string; code: string; active: boolean };
@@ -26,7 +26,10 @@ type Dashboard = {
 };
 type StaffDashboard = { context: { currency: string; timezone: string; date: string }; kind: string; role: string; metrics: Array<{ label: string; value: string; note: string }>; tasks: Array<{ severity: "critical" | "warning" | "info"; title: string; count: string; detail: string }>; primary_action: { label: string; href: string }; awareness: { title: string; href: string; items: Array<{ product_id: string; name: string; quantity: string; reorder_level: number }> } | null };
 
-const managementRoles = new Set(["owner", "admin", "platform_admin", "platform_super_admin"]);
+// Which dashboard variant renders. Derived from the authorization context's
+// reports permission (the same one the dashboard API enforces), not a role
+// name list — role names have drifted here before.
+const MANAGEMENT_PERMISSION = "reports.read";
 const businessDate = (timezone: string) => {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const value = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
@@ -44,7 +47,7 @@ export default function Home() {
   const [branchId, setBranchId] = useState(""); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   const pendingLoad = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const skipInitializedFilterLoad = useRef(false);
-  const isManagement = managementRoles.has(auth?.role || "");
+  const isManagement = can(auth, MANAGEMENT_PERMISSION);
   useLayoutEffect(() => {
     const cached = readCachedAuthorizationContext();
     if (cached) setAuth(cached);
@@ -58,7 +61,7 @@ export default function Home() {
         const context = await loadAuthorizationContext();
         setAuth(context);
         if (context.role === "patient") { router.replace("/patient-portal"); return; }
-        if (managementRoles.has(context.role)) {
+        if (can(context, MANAGEMENT_PERMISSION)) {
           const params = new URLSearchParams(); if (start) params.set("start", start); if (end) params.set("end", end); if (branchId) params.set("branch_id", branchId);
           const [nextDashboard, nextBranches] = await Promise.all([api.get<Dashboard>(`/api/v1/reports/dashboard?${params.toString()}`), api.get<Branch[]>("/api/v1/catalog/branches")]);
           setDashboard(nextDashboard); setBranches(nextBranches); setStaff(null);

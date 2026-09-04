@@ -29,7 +29,7 @@ import AppSelect from "@/components/app-select";
 import PermissionGate from "@/components/permission-gate";
 import { api, ApiError } from "@/lib/api";
 import { hasExactProductCode } from "@/lib/product-search";
-import type { AuthorizationContext } from "@/lib/authorization";
+import { can, type AuthorizationContext } from "@/lib/authorization";
 
 type Branch = { id: string; name: string; code: string };
 type Supplier = {
@@ -158,7 +158,7 @@ export default function PurchasingPage() {
         setProducts([]);
         setBranchId(branchData[0]?.id || "");
         setSupplierId(supplierData.find((supplier) => supplier.active)?.id || "");
-        setCanManagePostedOrders(["owner", "admin", "platform_admin", "platform_super_admin"].includes(authorization.role));
+        setCanManagePostedOrders(can(authorization, "purchasing.orders.rollback"));
       })
       .catch(
         (caught) =>
