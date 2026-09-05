@@ -31,6 +31,7 @@ import { api, ApiError } from "@/lib/api";
 import { hasExactProductCode } from "@/lib/product-search";
 import { can, type AuthorizationContext } from "@/lib/authorization";
 
+type ProductCategory = { id: string; name: string; description?: string | null; active: boolean };
 type Branch = { id: string; name: string; code: string };
 type Supplier = {
   id: string;
@@ -143,6 +144,7 @@ export default function PurchasingPage() {
   const [queueVersion, setQueueVersion] = useState(0);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [canManagePostedOrders, setCanManagePostedOrders] = useState(false);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -150,11 +152,13 @@ export default function PurchasingPage() {
       api.get<Branch[]>("/api/v1/catalog/branches"),
       api.get<Supplier[]>("/api/v1/purchasing/suppliers?include_inactive=true"),
       api.get<AuthorizationContext>("/api/v1/auth/me/authorization"),
+      api.get<ProductCategory[]>("/api/v1/catalog/product-categories"),
     ])
-      .then(([branchData, supplierData, authorization]) => {
+      .then(([branchData, supplierData, authorization, categoryData]) => {
         if (!active) return;
         setBranches(branchData);
         setSuppliers(supplierData);
+        setCategories(categoryData);
         setProducts([]);
         setBranchId(branchData[0]?.id || "");
         setSupplierId(supplierData.find((supplier) => supplier.active)?.id || "");
@@ -1045,6 +1049,7 @@ export default function PurchasingPage() {
           sellingPrice={calculatedSellingPrice}
           category={category}
           setCategory={setCategory}
+          categories={categories}
           unit={unit}
           setUnit={setUnit}
           reorderLevel={reorderLevel}
@@ -1618,6 +1623,7 @@ function InventoryDetailsModal(props: {
   itemName: string;
   manufacturer: string;
   setManufacturer: (value: string) => void;
+  categories: ProductCategory[];
 }) {
   const { close, onSubmit, busy, selected } = props;
   return (
@@ -1684,12 +1690,25 @@ function InventoryDetailsModal(props: {
           </Field>
           <div className="sm:col-span-2 rounded-2xl bg-teal-50 px-4 py-3 text-sm text-teal-900"><div className="flex items-center justify-between gap-4"><span className="font-semibold">Calculated selling price</span><span className="text-lg font-bold">{props.sellingPrice ? money(Number(props.sellingPrice)) : "Enter a markup"}</span></div><p className="mt-1 text-xs text-teal-700">Cost: {money(Number(props.unitCost || 0))} · {props.pricingMethod === "multiplier" ? "Cost × multiplier" : "Cost + (cost × markup rate)"}. This price is saved with the product.</p></div>
           <Field label="Category">
-            <input
-              required
-              value={props.category}
-              readOnly={Boolean(selected)}
-              onChange={(event) => props.setCategory(event.target.value)}
-            />
+            {(() => {
+              const options = (props.categories.length > 0
+                ? props.categories
+                    .filter((record) => record.active)
+                    .map((record) => ({ value: record.name, label: record.name }))
+                : [{ value: "pharmacy", label: "Pharmacy / drug" }, { value: "store", label: "Store item" }]
+              );
+              if (props.category && !options.some((option) => option.value === props.category)) {
+                // Existing products may carry a legacy category; keep it selectable.
+                options.unshift({ value: props.category, label: props.category });
+              }
+              return (
+                <AppSelect
+                  value={props.category}
+                  onChange={(value) => props.setCategory(value)}
+                  options={options}
+                />
+              );
+            })()}
           </Field>
           <Field label="Unit / pack">
             <input
