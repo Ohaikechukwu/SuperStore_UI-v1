@@ -21,22 +21,19 @@ export type AuthorizationContext = {
 // its initial render. The promise is deliberately not retained after it
 // settles: permissions can change while a user keeps a tab open.
 let authorizationInFlight: Promise<AuthorizationContext> | null = null;
-const AUTHORIZATION_CACHE_KEY = "superstore.session_authorization";
+let authorizationContext: AuthorizationContext | null = null;
 
 export function readCachedAuthorizationContext(): AuthorizationContext | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(AUTHORIZATION_CACHE_KEY);
-    const context = raw ? JSON.parse(raw) as AuthorizationContext : null;
-    return context?.user_id && context.tenant_id && context.role ? context : null;
-  } catch {
-    return null;
-  }
+  return authorizationContext;
 }
 
 function cacheAuthorizationContext(context: AuthorizationContext) {
-  window.sessionStorage.setItem(AUTHORIZATION_CACHE_KEY, JSON.stringify(context));
-  return context;
+  authorizationContext = context;
+  return authorizationContext;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("superstore:auth-cleared", () => { authorizationContext = null; });
 }
 
 export function loadAuthorizationContext() {

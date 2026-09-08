@@ -20,10 +20,6 @@ const emptySummary: QueueSummary = {
   legacy: 0,
 };
 
-function liveVersionKey(tenantId: string, userId: string) {
-  return `superstore.sync.live_version:${tenantId}:${userId}`;
-}
-
 export default function SyncManager({ onStateChange }: { onStateChange: (state: SyncState) => void }) {
   const pollLiveVersion = useCallback(async () => {
     if (!await apiIsReachable()) return;
@@ -36,12 +32,9 @@ export default function SyncManager({ onStateChange }: { onStateChange: (state: 
     if (!response?.ok) return;
     const body = await response.json() as { cursor: string | null };
     if (!body.cursor) return;
-    const key = liveVersionKey(owner.tenantId, owner.userId);
-    const previous = window.sessionStorage.getItem(key);
-    window.sessionStorage.setItem(key, body.cursor);
-    if (previous && previous !== body.cursor) {
-      window.dispatchEvent(new CustomEvent("superstore:live-change"));
-    }
+    // This is a live invalidation signal, not durable state. Persisting it
+    // would retain tenant and user identifiers after the browser closes.
+    window.dispatchEvent(new CustomEvent("superstore:live-change"));
   }, []);
 
   const refresh = useCallback(async () => {

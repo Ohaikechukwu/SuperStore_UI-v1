@@ -1,20 +1,12 @@
 /* Superstore Health Suite offline shell.
  *
  * Deliberately never cache /api, /edge-api, or any authenticated response.
- * API payloads can contain clinical and financial data; operational snapshots
- * are owned by the application and are separately scoped to the signed-in
- * tenant/user.  This worker only retains static assets and safe route shells.
+ * API payloads can contain clinical and financial data. This worker retains
+ * only static assets and the generic offline page.
  */
-const VERSION = "2026-09-03-2";
+const VERSION = "2026-09-07-1";
 const STATIC_CACHE = `superstore-static-${VERSION}`;
-const RUNTIME_CACHE = `superstore-runtime-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
-const TENANT_ID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const OFFLINE_ROUTE = new RegExp(`^/t/${TENANT_ID}/(?:pos|inventory|sync)/?$`, "i");
-
-function isSafeDocument(url) {
-  return url.pathname === "/" || OFFLINE_ROUTE.test(url.pathname);
-}
 
 function clearRuntimeCaches() {
   return caches.keys().then((keys) => Promise.all(keys
@@ -54,13 +46,10 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/edge-api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then((response) => {
-      if (response.ok && isSafeDocument(url)) {
-        const copy = response.clone();
-        event.waitUntil(caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, copy)));
-      }
-      return response;
-    }).catch(async () => (await caches.match(request)) || (await caches.match(OFFLINE_URL))));
+    // Authenticated route documents can contain account-specific markup.
+    // Never retain them in Cache Storage; only the generic offline page is
+    // available when navigation cannot reach the network.
+    event.respondWith(fetch(request).catch(async () => await caches.match(OFFLINE_URL)));
     return;
   }
 

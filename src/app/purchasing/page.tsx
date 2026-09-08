@@ -132,8 +132,9 @@ export default function PurchasingPage() {
   const [stockCodeFocused, setStockCodeFocused] = useState(false);
   const [quantity, setQuantity] = useState("1");
   const [unitCost, setUnitCost] = useState("");
-  const [pricingMethod, setPricingMethod] = useState<"multiplier" | "markup_rate">("multiplier");
+  const [pricingMethod, setPricingMethod] = useState<"manual" | "multiplier" | "markup_rate">("manual");
   const [markupValue, setMarkupValue] = useState("");
+  const [directSellingPrice, setDirectSellingPrice] = useState("");
   const [category, setCategory] = useState("general");
   const [unit, setUnit] = useState("unit");
   const [reorderLevel, setReorderLevel] = useState("0");
@@ -211,11 +212,12 @@ export default function PurchasingPage() {
   }, [productLookup, selectedProduct]);
   const calculatedSellingPrice = useMemo(() => {
     const cost = Number(unitCost);
+    if (pricingMethod === "manual") return directSellingPrice;
     const markup = Number(markupValue);
     if (!unitCost || markupValue === "" || Number.isNaN(cost) || Number.isNaN(markup)) return "";
     const selling = pricingMethod === "multiplier" ? cost * markup : cost * (1 + markup);
     return selling >= 0 ? selling.toFixed(2) : "";
-  }, [unitCost, markupValue, pricingMethod]);
+  }, [unitCost, markupValue, pricingMethod, directSellingPrice]);
 
   function resetItem() {
     setSearch("");
@@ -226,8 +228,9 @@ export default function PurchasingPage() {
     setStockCodeFocused(false);
     setQuantity("1");
     setUnitCost("");
-    setPricingMethod("multiplier");
+    setPricingMethod("manual");
     setMarkupValue("");
+    setDirectSellingPrice("");
     setCategory("general");
     setUnit("unit");
     setReorderLevel("0");
@@ -244,8 +247,9 @@ export default function PurchasingPage() {
     setManufacturer(product.manufacturer || "");
     setStockCode(product.stock_code);
     setUnitCost(product.cost_price);
-    setPricingMethod(product.pricing_method === "markup_rate" ? "markup_rate" : "multiplier");
+    setPricingMethod(product.pricing_method === "manual" ? "manual" : product.pricing_method === "markup_rate" ? "markup_rate" : "multiplier");
     setMarkupValue(product.markup_value || "");
+    setDirectSellingPrice(product.selling_price || "");
     setCategory(product.category);
     setUnit(product.unit);
     setReorderLevel(String(product.reorder_level));
@@ -339,7 +343,7 @@ export default function PurchasingPage() {
           unit_cost: unitCost,
           selling_price: calculatedSellingPrice,
           pricing_method: pricingMethod,
-          markup_value: markupValue,
+          markup_value: pricingMethod === "manual" ? null : markupValue,
           category,
           unit,
           reorder_level: Number(reorderLevel || 0),
@@ -1046,6 +1050,8 @@ export default function PurchasingPage() {
           setPricingMethod={setPricingMethod}
           markupValue={markupValue}
           setMarkupValue={setMarkupValue}
+          directSellingPrice={directSellingPrice}
+          setDirectSellingPrice={setDirectSellingPrice}
           sellingPrice={calculatedSellingPrice}
           category={category}
           setCategory={setCategory}
@@ -1603,10 +1609,12 @@ function InventoryDetailsModal(props: {
   stockCode: string;
   setStockCode: (value: string) => void;
   unitCost: string;
-  pricingMethod: "multiplier" | "markup_rate";
-  setPricingMethod: (value: "multiplier" | "markup_rate") => void;
+  pricingMethod: "manual" | "multiplier" | "markup_rate";
+  setPricingMethod: (value: "manual" | "multiplier" | "markup_rate") => void;
   markupValue: string;
   setMarkupValue: (value: string) => void;
+  directSellingPrice: string;
+  setDirectSellingPrice: (value: string) => void;
   sellingPrice: string;
   category: string;
   setCategory: (value: string) => void;
@@ -1667,17 +1675,43 @@ function InventoryDetailsModal(props: {
               placeholder="e.g. Swipha"
             />
           </Field>
-          <Field label="Pricing method">
-            <AppSelect
-              value={props.pricingMethod}
-              onChange={(value) => props.setPricingMethod(value as "multiplier" | "markup_rate")}
-              options={[
-                { value: "multiplier", label: "Cost multiplier (e.g. 1.20)" },
-                { value: "markup_rate", label: "Markup rate (e.g. 0.50 = 50%)" },
-              ]}
-            />
-          </Field>
-          <Field label={props.pricingMethod === "multiplier" ? "Price multiplier" : "Markup rate"}>
+          <div className="sm:col-span-2">
+            <p className="text-sm font-semibold text-slate-700">How do you want to set the selling price?</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Selling price entry method">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={props.pricingMethod === "manual"}
+                onClick={() => props.setPricingMethod("manual")}
+                className={`rounded-xl border p-4 text-left transition ${props.pricingMethod === "manual" ? "border-teal-600 bg-teal-50 ring-1 ring-teal-600" : "border-slate-200 bg-white hover:border-teal-300"}`}
+              >
+                <span className="block font-bold text-slate-900">Enter a direct price</span>
+                <span className="mt-1 block text-xs text-slate-600">Set the exact price customers will pay.</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={props.pricingMethod !== "manual"}
+                onClick={() => props.setPricingMethod(props.pricingMethod === "manual" ? "multiplier" : props.pricingMethod)}
+                className={`rounded-xl border p-4 text-left transition ${props.pricingMethod !== "manual" ? "border-teal-600 bg-teal-50 ring-1 ring-teal-600" : "border-slate-200 bg-white hover:border-teal-300"}`}
+              >
+                <span className="block font-bold text-slate-900">Calculate from markup</span>
+                <span className="mt-1 block text-xs text-slate-600">Calculate the selling price from the unit cost.</span>
+              </button>
+            </div>
+          </div>
+          {props.pricingMethod === "manual" ? <Field label="Direct selling price"><input required type="number" min="0" step="0.01" value={props.directSellingPrice} onChange={(event) => props.setDirectSellingPrice(event.target.value)} placeholder="Enter the exact POS price" /></Field> : <>
+            <Field label="Markup method">
+              <AppSelect
+                value={props.pricingMethod}
+                onChange={(value) => props.setPricingMethod(value as "multiplier" | "markup_rate")}
+                options={[
+                  { value: "multiplier", label: "Cost multiplier (e.g. 1.20)" },
+                  { value: "markup_rate", label: "Markup rate (e.g. 0.50 = 50%)" },
+                ]}
+              />
+            </Field>
+            <Field label={props.pricingMethod === "multiplier" ? "Price multiplier" : "Markup rate"}>
             <input
               required
               type="number"
@@ -1687,8 +1721,9 @@ function InventoryDetailsModal(props: {
               onChange={(event) => props.setMarkupValue(event.target.value)}
               placeholder={props.pricingMethod === "multiplier" ? "1.20" : "0.50"}
             />
-          </Field>
-          <div className="sm:col-span-2 rounded-2xl bg-teal-50 px-4 py-3 text-sm text-teal-900"><div className="flex items-center justify-between gap-4"><span className="font-semibold">Calculated selling price</span><span className="text-lg font-bold">{props.sellingPrice ? money(Number(props.sellingPrice)) : "Enter a markup"}</span></div><p className="mt-1 text-xs text-teal-700">Cost: {money(Number(props.unitCost || 0))} · {props.pricingMethod === "multiplier" ? "Cost × multiplier" : "Cost + (cost × markup rate)"}. This price is saved with the product.</p></div>
+            </Field>
+          </>}
+          <div className="sm:col-span-2 rounded-2xl bg-teal-50 px-4 py-3 text-sm text-teal-900"><div className="flex items-center justify-between gap-4"><span className="font-semibold">{props.pricingMethod === "manual" ? "Direct selling price" : "Calculated selling price"}</span><span className="text-lg font-bold">{props.sellingPrice ? money(Number(props.sellingPrice)) : props.pricingMethod === "manual" ? "Enter a direct price" : "Enter a markup"}</span></div><p className="mt-1 text-xs text-teal-700">Cost: {money(Number(props.unitCost || 0))} · {props.pricingMethod === "manual" ? "The entered price will be saved without a markup calculation." : props.pricingMethod === "multiplier" ? "Cost × multiplier" : "Cost + (cost × markup rate)"}. This price is saved with the product.</p></div>
           <Field label="Category">
             {(() => {
               const options = (props.categories.length > 0

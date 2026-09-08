@@ -21,7 +21,7 @@ export default function TenantLogoutPage({ tenantPublicId, initialTheme }: {
     // session. Preserve the server-rendered tenant identity for this page.
     void apiFetch(API_BASE, "/api/v1/auth/logout", { method: "POST" })
       .catch(() => undefined)
-      .finally(() => clearTokens({ resetTheme: false, purgeData: true }));
+      .finally(() => clearTokens({ resetTheme: false }));
   }, [initialTheme]);
 
   return <main className="grid min-h-screen place-items-center bg-slate-50 p-6">

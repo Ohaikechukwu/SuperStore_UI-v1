@@ -7,7 +7,7 @@ import { API_BASE, apiRequestHeaders } from "@/lib/config";
 import { saveTokens, signedInHomePath } from "@/auth";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from "@/lib/password-policy";
 
-function deviceId() { const key = "superstore.browser_device_id"; const known = window.localStorage.getItem(key); if (known) return known; const value = crypto.randomUUID(); window.localStorage.setItem(key, value); return value; }
+function deviceId() { return crypto.randomUUID(); }
 export default function SignupPage() {
   const router = useRouter(); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setLoading(true); setError(""); const form = new FormData(event.currentTarget); const tenant_slug = String(form.get("tenant_slug")); const planId = new URLSearchParams(window.location.search).get("plan"); try { const response = await fetch(`${API_BASE}/api/v1/auth/signup`, { method: "POST", headers: apiRequestHeaders(API_BASE, { "content-type": "application/json" }), credentials: "include", body: JSON.stringify({ tenant_name: String(form.get("tenant_name")), tenant_slug, full_name: String(form.get("full_name")), email: String(form.get("email")), password: String(form.get("password")), device_id: deviceId() }) }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Unable to create workspace."); saveTokens(data); router.replace(planId ? `/subscribe?plan=${encodeURIComponent(planId)}` : signedInHomePath()); } catch (caught) { setError(caught instanceof Error ? caught.message : "Unable to create workspace."); } finally { setLoading(false); } }
