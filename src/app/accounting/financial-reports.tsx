@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import FormSelect from "@/components/form-select";
 import { api } from "@/lib/api";
 import {
+  isRecord,
+  isAmount,
+  accountingCompatibilityMessage,
+  accountingRequestError,
+} from "./response-contract";
+import {
   Account,
   Alert,
   button,
@@ -63,6 +69,89 @@ type Statements = {
     basis: string;
   };
 };
+type LedgerResponse = {
+  items: Ledger[];
+  opening_balances: Record<string, string>;
+};
+type TrialResponse = { items: Balance[] };
+function isStatementRow(value: unknown) {
+  return (
+    isRecord(value) &&
+    ["account_id", "code", "name"].every(
+      (key) => typeof value[key] === "string",
+    ) &&
+    isAmount(value.balance)
+  );
+}
+function isLedgerResponse(value: unknown): value is LedgerResponse {
+  return (
+    isRecord(value) &&
+    isRecord(value.opening_balances) &&
+    Object.values(value.opening_balances).every(isAmount) &&
+    Array.isArray(value.items) &&
+    value.items.every(
+      (row) =>
+        isRecord(row) &&
+        [
+          "line_id",
+          "account_id",
+          "account_code",
+          "account_name",
+          "entry_date",
+          "date_basis",
+          "description",
+        ].every((key) => typeof row[key] === "string") &&
+        ["debit", "credit", "balance"].every((key) => isAmount(row[key])),
+    )
+  );
+}
+function isTrialResponse(value: unknown): value is TrialResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(
+      (row) =>
+        isStatementRow(row) &&
+        isRecord(row) &&
+        isAmount(row.debit) &&
+        isAmount(row.credit),
+    )
+  );
+}
+function isStatements(value: unknown): value is Statements {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.profit_and_loss) ||
+    !isRecord(value.balance_sheet) ||
+    !isRecord(value.cash_movement)
+  )
+    return false;
+  const pnl = value.profit_and_loss,
+    balance = value.balance_sheet,
+    cash = value.cash_movement;
+  return (
+    ["income", "expenses"].every(
+      (key) => Array.isArray(pnl[key]) && pnl[key].every(isStatementRow),
+    ) &&
+    ["total_income", "total_expenses", "net_profit"].every((key) =>
+      isAmount(pnl[key]),
+    ) &&
+    ["assets", "liabilities", "equity"].every(
+      (key) =>
+        Array.isArray(balance[key]) && balance[key].every(isStatementRow),
+    ) &&
+    [
+      "total_assets",
+      "total_liabilities",
+      "total_equity",
+      "unclosed_earnings",
+      "difference",
+    ].every((key) => isAmount(balance[key])) &&
+    typeof balance.balanced === "boolean" &&
+    typeof cash.basis === "string" &&
+    ["opening", "net_change", "closing"].every((key) => isAmount(cash[key]))
+  );
+}
 function exportCsv(name: string, rows: string[][]) {
   const csv = rows
     .map((row) =>
@@ -117,16 +206,17 @@ export default function FinancialReports({
       const ledgerParams = new URLSearchParams(dates);
       if (account) ledgerParams.set("account_id", account);
       const [gl, tb, fs] = await Promise.all([
-        api.get<{ items: Ledger[]; opening_balances: Record<string, string> }>(
-          "/api/v1/accounting/general-ledger?" + ledgerParams,
-        ),
-        api.get<{ items: Balance[] }>(
-          "/api/v1/accounting/reports/trial-balance?" + dates,
-        ),
-        api.get<Statements>(
+        api.get<unknown>("/api/v1/accounting/general-ledger?" + ledgerParams),
+        api.get<unknown>("/api/v1/accounting/reports/trial-balance?" + dates),
+        api.get<unknown>(
           "/api/v1/accounting/reports/financial-statements?" + dates,
         ),
-      ]);
+      ]).catch((error) => {
+        throw accountingRequestError(error, "Financial reports");
+      });
+      if (!isLedgerResponse(gl) || !isTrialResponse(tb) || !isStatements(fs)) {
+        throw new Error(accountingCompatibilityMessage("Financial reports"));
+      }
       setResult({
         ledger: gl.items,
         opening: gl.opening_balances,

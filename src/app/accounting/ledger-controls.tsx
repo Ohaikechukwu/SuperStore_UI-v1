@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  isRecord,
+  isAmount,
+  accountingCompatibilityMessage,
+  accountingRequestError,
+} from "./response-contract";
 import { Alert, button, money, panel, useAction, cents } from "./accounting-ui";
 
 type Controls = {
@@ -18,13 +24,49 @@ type Controls = {
   undated_legacy_journals: number;
   cross_tenant_lines: number;
 };
+function isControls(value: unknown): value is Controls {
+  return (
+    isRecord(value) &&
+    typeof value.basis === "string" &&
+    Array.isArray(value.reconciliations) &&
+    value.reconciliations.every(
+      (row) =>
+        isRecord(row) &&
+        typeof row.name === "string" &&
+        typeof row.account_code === "string" &&
+        ["control_balance", "document_balance", "difference"].every((key) =>
+          isAmount(row[key]),
+        ),
+    ) &&
+    [
+      "unlinked_open_documents",
+      "unbalanced_posted_journals",
+      "undated_legacy_journals",
+      "cross_tenant_lines",
+    ].every(
+      (key) =>
+        typeof value[key] === "number" &&
+        Number.isSafeInteger(value[key]) &&
+        value[key] >= 0,
+    )
+  );
+}
 export default function LedgerControls() {
   const [controls, setControls] = useState<Controls | null>(null);
   const action = useAction();
   async function load() {
     await action.run(async () => {
       setControls(null);
-      setControls(await api.get<Controls>("/api/v1/accounting/controls"));
+      const response = await api
+        .get<unknown>("/api/v1/accounting/controls")
+        .catch((error) => {
+          throw accountingRequestError(error, "Ledger integrity checks");
+        });
+      if (!isControls(response))
+        throw new Error(
+          accountingCompatibilityMessage("Ledger integrity checks"),
+        );
+      setControls(response);
     });
   }
   useEffect(() => {

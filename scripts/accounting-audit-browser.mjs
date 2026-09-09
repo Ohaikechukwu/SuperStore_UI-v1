@@ -15,6 +15,9 @@ mkdirSync(output, { recursive: true });
 const permissions = ["accounting.read", "accounting.manage", "accounting.post", "accounting.approve", "accounting.period.manage", "accounting.payables.manage", "accounting.receivables.manage", "reports.read"];
 let readOnly = false;
 let failReports = false;
+let missingControls = false;
+let malformedControls = false;
+let reportShape = "current";
 let writeCount = 0;
 const reportRequests = [];
 const runtimeErrors = [];
@@ -71,6 +74,17 @@ await context.route("**/*", async route => {
     else body = { opening_balances: { cash: "100.00" }, items: [{ line_id: "ledger-line", account_id: "cash", account_code: "1000", account_name: "Cash on hand", entry_date: "2026-09-03", date_basis: "entry_date", description: "Supplier payment", debit: "0.00", credit: "20.00", balance: "80.00" }] };
   } else if (path.endsWith("/health/ready")) body = { status: "ok" };
   else if (path.endsWith("/edge/status")) body = { cloud: "online" };
+  if (path.endsWith("/accounting/controls")) {
+    if (missingControls) { status = 404; body = { detail: "Not Found" }; }
+    else if (malformedControls) body = { basis: "Malformed data", reconciliations: [null] };
+  }
+  if (!failReports && path.endsWith("/financial-statements")) {
+    if (reportShape === "missing-cash") { body = structuredClone(fs); delete body.cash_movement; }
+    if (reportShape === "null") body = null;
+    if (reportShape === "malformed-rows") { body = structuredClone(fs); body.profit_and_loss.income = [null]; }
+    if (reportShape === "legacy") body = { profit_and_loss: { income: [], expenses: [], net_profit: "0" }, balance_sheet: { assets: [], liabilities: [], equity: [], total_assets: "0", total_liabilities: "0" }, cash_flow: { operating_net: "0" } };
+  }
+  if (!failReports && path.endsWith("/general-ledger") && reportShape === "missing-opening") delete body.opening_balances;
   return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 });
 const page = await context.newPage();
@@ -153,6 +167,33 @@ try {
   await page.getByRole("button", { name: "Ledger & reports", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "Reports temporarily" }).waitFor();
   assert.equal(await page.getByRole("heading", { name: "Balance sheet", exact: true }).count(), 0, "Failed reports are not shown as zeros");
+  failReports = false;
+  missingControls = true;
+  await page.getByRole("button", { name: "Chart & periods", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Ledger integrity checks are unavailable on this backend (404)" }).waitFor();
+  await page.getByRole("heading", { name: "Chart of accounts", exact: true }).waitFor();
+  await snapshot("missing-controls-route");
+  for (const shape of ["missing-cash", "legacy", "null", "malformed-rows", "missing-opening"]) {
+    reportShape = shape;
+    await page.getByRole("button", { name: "Ledger & reports", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "Financial reports are unavailable because the backend response is missing required accounting data." }).waitFor();
+    assert.equal(await page.getByRole("heading", { name: "Balance sheet", exact: true }).count(), 0, shape + ": incompatible figures are not displayed");
+    assert.equal(await page.getByRole("button", { name: "Export ledger CSV" }).count(), 0, shape + ": incompatible reports cannot be exported");
+    if (shape === "missing-cash") await snapshot("legacy-report-no-crash");
+    await page.getByRole("button", { name: "Chart & periods", exact: true }).click();
+  }
+  missingControls = false;
+  malformedControls = true;
+  await page.getByRole("button", { name: "Refresh checks" }).click();
+  await page.getByRole("alert").filter({ hasText: "Ledger integrity checks are unavailable because the backend response is missing required accounting data." }).waitFor();
+  await snapshot("malformed-controls-no-crash");
+  malformedControls = false;
+  reportShape = "current";
+  await page.getByRole("button", { name: "Refresh checks" }).click();
+  await page.getByRole("cell", { name: "0.00", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Ledger & reports", exact: true }).click();
+  await page.getByRole("heading", { name: "Balance sheet", exact: true }).waitFor();
+  await snapshot("compatible-backend-recovered");
   readOnly = true;
   await page.reload();
   await page.getByRole("heading", { name: "Chart of accounts", exact: true }).waitFor();
