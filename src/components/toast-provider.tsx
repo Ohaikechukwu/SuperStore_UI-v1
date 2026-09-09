@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 type ToastTone = "success" | "warning" | "error" | "info";
 type Toast = { id: number; title: string; description?: string; tone: ToastTone };
@@ -21,8 +21,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback((tone: ToastTone, title: string, description?: string) => {
     const id = Date.now() + Math.floor(Math.random() * 10000);
     setToasts((items) => [...items, { id, tone, title, description }].slice(-5));
-    window.setTimeout(() => dismiss(id), tone === "warning" ? 8000 : 5000);
-  }, [dismiss]);
+  }, []);
   const value = useMemo<ToastApi>(() => ({
     show,
     success: (title, description) => show("success", title, description),
@@ -30,11 +29,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     error: (title, description) => show("error", title, description),
     info: (title, description) => show("info", title, description),
   }), [show]);
-  return <ToastContext.Provider value={value}>{children}<div aria-live="polite" className="pointer-events-none fixed right-4 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-md flex-col gap-3">
-    {toasts.map((toast) => <div key={toast.id} role={toast.tone === "error" ? "alert" : "status"} className={`pointer-events-auto flex gap-3 rounded-2xl border p-4 shadow-xl shadow-slate-900/10 ${styles[toast.tone].panel}`}>
-      <span className="mt-0.5 shrink-0">{styles[toast.tone].icon}</span><div className="min-w-0 flex-1"><p className="text-sm font-bold">{toast.title}</p>{toast.description && <p className="mt-1 text-xs leading-5 opacity-80">{toast.description}</p>}</div><button onClick={() => dismiss(toast.id)} aria-label="Dismiss notification" className="-mr-1 -mt-1 rounded-lg p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100"><X size={16} /></button>
-    </div>)}
+  return <ToastContext.Provider value={value}>{children}<div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-md flex-col gap-3">
+    {toasts.map((toast) => <ToastMessage key={toast.id} toast={toast} dismiss={dismiss} />)}
   </div></ToastContext.Provider>;
+}
+
+function ToastMessage({ toast, dismiss }: { toast: Toast; dismiss: (id: number) => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    // Errors remain until dismissed. Give readers a fresh interval after interaction.
+    if (toast.tone === "error" || hovered || focused) return;
+    const timer = window.setTimeout(() => dismiss(toast.id), toast.tone === "warning" ? 8000 : 6000);
+    return () => window.clearTimeout(timer);
+  }, [dismiss, focused, hovered, toast.id, toast.tone]);
+  return <div role={toast.tone === "error" ? "alert" : "status"} aria-atomic="true"
+    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+    onFocus={() => setFocused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
+    className={`pointer-events-auto flex gap-3 rounded-2xl border p-4 shadow-xl shadow-slate-900/10 ${styles[toast.tone].panel}`}>
+    <span aria-hidden="true" className="mt-0.5 shrink-0">{styles[toast.tone].icon}</span>
+    <div className="min-w-0 flex-1"><p className="text-sm font-bold">{toast.title}</p>{toast.description && <p className="mt-1 text-sm leading-6">{toast.description}</p>}</div>
+    <button type="button" onClick={() => dismiss(toast.id)} aria-label={`Dismiss notification: ${toast.title}`} className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center rounded-xl hover:bg-black/5"><X size={18} /></button>
+  </div>;
 }
 
 export function useToast() {

@@ -42,6 +42,7 @@ export default function AppSelect({
   const listId = useId();
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [query, setQuery] = useState("");
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const deferredQuery = useDeferredValue(query);
   const selected = options.find((option) => option.value === value);
   const filteredOptions = useMemo(() => {
@@ -63,10 +64,11 @@ export default function AppSelect({
     function positionMenu() {
       const rect = trigger.current?.getBoundingClientRect();
       if (!rect) return;
+      setPortalTarget(root.current?.closest("dialog") || document.body);
       const roomBelow = window.innerHeight - rect.bottom;
       const openAbove = roomBelow < 272 && rect.top > roomBelow;
-      const maxHeight = Math.max(144, Math.min(256, (openAbove ? rect.top : roomBelow) - 16));
-      setMenuPosition({ top: openAbove ? Math.max(8, rect.top - maxHeight - 8) : rect.bottom + 8, left: rect.left, width: rect.width, maxHeight });
+      const maxHeight = Math.max(80, Math.min(320, (openAbove ? rect.top : roomBelow) - 16));
+      setMenuPosition({ top: openAbove ? Math.max(8, rect.top - maxHeight - 8) : rect.bottom + 8, left: Math.max(8, Math.min(rect.left, window.innerWidth - Math.min(rect.width, window.innerWidth - 16) - 8)), width: Math.min(rect.width, window.innerWidth - 16), maxHeight });
     }
     positionMenu();
     window.addEventListener("resize", positionMenu);
@@ -79,28 +81,51 @@ export default function AppSelect({
     onChange(option.value);
     setQuery("");
     setOpen(false);
+    trigger.current?.focus();
   }
 
+  const menuReady = open && Boolean(menuPosition);
+  useEffect(() => {
+    if (!menuReady) return;
+    const first = menu.current?.querySelector<HTMLElement>('input, [aria-selected="true"]:not(:disabled)')
+      || menu.current?.querySelector<HTMLElement>('[role="option"]:not(:disabled)');
+    first?.focus();
+  }, [menuReady]);
+
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "Escape") { setOpen(false); return; }
-    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen((current) => !current); return; }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      setOpen(true);
+    }
+    if (event.key === "Escape") setOpen(false);
+  }
+
+  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault(); event.stopPropagation();
+      setOpen(false); trigger.current?.focus(); return;
+    }
+    if (event.key === "Tab") { setOpen(false); trigger.current?.focus(); return; }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    if (event.target instanceof HTMLInputElement && ["Home", "End"].includes(event.key)) return;
+    const items = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') || []);
+    if (!items.length) return;
     event.preventDefault();
-    const enabled = filteredOptions.filter((option) => !option.disabled);
-    const current = enabled.findIndex((option) => option.value === value);
-    const next = event.key === "ArrowDown"
-      ? enabled[(current + 1 + enabled.length) % enabled.length]
-      : enabled[(current - 1 + enabled.length) % enabled.length];
-    if (next) choose(next);
+    const current = items.findIndex((item) => item === document.activeElement);
+    const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+      : event.key === "ArrowDown" ? (current + 1) % items.length
+      : (current <= 0 ? items.length : current) - 1;
+    items[index]?.focus();
   }
 
   return <div ref={root} className={cn("relative w-full", className)}>
-    {name && <input type="hidden" name={name} value={value} />}
+    {name && <input type="hidden" disabled={disabled} name={name} value={value} />}
     <button
       ref={trigger}
       id={id}
       type="button"
       disabled={disabled}
+      role="combobox"
       aria-label={ariaLabel}
       aria-required={required || undefined}
       aria-describedby={ariaDescribedBy}
@@ -119,13 +144,14 @@ export default function AppSelect({
       <span className="min-w-0 flex-1 truncate">{selected?.label || placeholder}</span>
       <ChevronDown size={17} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180 text-teal-600")} />
     </button>
-    {open && menuPosition && createPortal(<div ref={menu} id={listId} role="listbox" style={menuPosition} className="fixed z-[100] overflow-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
-      {options.length > 12 && <div className="sticky top-0 z-10 bg-white p-1.5"><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search options" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></div>}
-      {visibleOptions.map((option) => <button
+    {open && menuPosition && createPortal(<div ref={menu} onKeyDown={onMenuKeyDown} style={menuPosition} className="fixed z-[100] overflow-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+      {options.length > 12 && <div className="sticky top-0 z-10 bg-white p-1.5"><input aria-label="Search options" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search options" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></div>}
+      <div id={listId} role="listbox" aria-label={ariaLabel || placeholder}>{visibleOptions.map((option) => <button
         type="button"
         role="option"
         aria-selected={option.value === value}
         key={option.value || "__placeholder"}
+        tabIndex={-1}
         disabled={option.disabled}
         onClick={() => choose(option)}
         className={cn(
@@ -137,8 +163,8 @@ export default function AppSelect({
         <span className="min-w-0 flex-1 truncate">{option.label}</span>
         {option.value === value && <Check size={16} className="shrink-0 text-teal-600" />}
       </button>)}
-      {!visibleOptions.length && <p className="px-3 py-4 text-sm text-slate-500">No matching options.</p>}
+      </div>{!visibleOptions.length && <p className="px-3 py-4 text-sm text-slate-500">No matching options.</p>}
       {filteredOptions.length > visibleOptions.length && <p className="px-3 py-2 text-xs text-slate-500">Showing the first {maxVisibleOptions} matches. Keep typing to refine the list.</p>}
-    </div>, document.body)}
+    </div>, portalTarget || document.body)}
   </div>;
 }

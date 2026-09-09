@@ -3,7 +3,7 @@
 :root {
   --tenant-primary: #0d9488;
   --tenant-secondary: #0f172a;
-  --tenant-primary-strong: color-mix(in srgb, var(--tenant-primary) 88%, #000);
+  --tenant-primary-strong: color-mix(in srgb, var(--tenant-primary) 80%, #000);
   --tenant-primary-soft: color-mix(in srgb, var(--tenant-primary) 10%, #fff);
   --tenant-primary-muted: color-mix(in srgb, var(--tenant-primary) 18%, #fff);
   --tenant-primary-border: color-mix(in srgb, var(--tenant-primary) 32%, #fff);
@@ -16,7 +16,7 @@
   --color-teal-300: color-mix(in srgb, var(--tenant-primary) 54%, #fff);
   --color-teal-400: color-mix(in srgb, var(--tenant-primary) 78%, #fff);
   --color-teal-500: var(--tenant-primary);
-  --color-teal-600: var(--tenant-primary);
+  --color-teal-600: var(--tenant-primary-strong);
   --color-teal-700: var(--tenant-primary-strong);
   --color-teal-800: color-mix(in srgb, var(--tenant-primary) 78%, #000);
   --color-teal-900: color-mix(in srgb, var(--tenant-primary) 64%, #000);
@@ -25,13 +25,17 @@
 
 * { box-sizing: border-box; }
 html { max-width: 100%; overflow-x: clip; background: var(--surface); }
-body { max-width: 100%; margin: 0; overflow-x: clip; background: var(--surface); color: #172033; font-family: Arial, Helvetica, sans-serif; }
+body { max-width: 100%; margin: 0; overflow-x: clip; background: var(--surface); color: #172033; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
 img, video, canvas, svg { max-width: 100%; }
 main, section, article, form, fieldset { min-width: 0; }
 p, h1, h2, h3, td, th, li { overflow-wrap: anywhere; }
-button, input, select { font: inherit; }
+@layer base {
+  button, input, select, textarea { font: inherit; }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+}
 ::selection { background: color-mix(in srgb, var(--tenant-primary) 25%, white); }
-.app-grid { background-image: linear-gradient(to right, color-mix(in srgb, var(--tenant-primary) 7%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--tenant-secondary) 5%, transparent) 1px, transparent 1px); background-size: 32px 32px; }
+.app-grid { background-color: var(--surface); }
 .scrollbar-hidden { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hidden::-webkit-scrollbar { display: none; }
 
@@ -45,7 +49,7 @@ button, input, select { font: inherit; }
 
 .tenant-shell > main > header {
   border-color: var(--tenant-primary-border);
-  background: color-mix(in srgb, #fff 91%, var(--tenant-secondary));
+  background: #fff;
 }
 
 .tenant-shell > aside > div:first-child {
@@ -54,7 +58,7 @@ button, input, select { font: inherit; }
 }
 
 :where(button, a, input, textarea, select):focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--tenant-primary) 28%, transparent);
+  outline: 3px solid var(--tenant-primary-strong);
   outline-offset: 2px;
 }
 
@@ -66,6 +70,20 @@ button, input, select { font: inherit; }
 }
 
 .tenant-shell [data-tenant-brand] { color: var(--tenant-secondary-strong); }
+
+/* Muted copy on light workspace surfaces must still be readable. Preserve the
+   lighter treatment where the same utility appears inside a dark panel. */
+.tenant-shell .text-slate-400:not(:where(
+  .bg-slate-800, .bg-slate-900, .bg-slate-950,
+  .bg-slate-800 *, .bg-slate-900 *, .bg-slate-950 *
+)) { color: var(--color-slate-500); }
+
+/* Legacy workflow overlays retain their own width, with safe short-screen scrolling. */
+:where(.tenant-shell div.fixed.inset-0.z-50, .tenant-shell div.fixed.inset-0.z-\[60\]) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-items: safe center;
+}
 
 /* Workspace pages share one readable but spacious content measure. Older
    clinical and configuration routes used one-off narrow containers; making
@@ -93,53 +111,36 @@ button, input, select { font: inherit; }
   max-width: 1440px !important;
 }
 
-/* Workflow forms need room for patient, prescription, diagnostic and billing
-   context. Within a tenant workspace they become full content-area pages,
-   preserving the sidebar and application header instead of covering them. */
-.tenant-shell div.fixed.inset-0.z-50,
-.tenant-shell div.fixed.inset-0.z-\[60\] {
+/* Scroll the enclosing region, keeping native header and column alignment. */
+@layer base {
+  table { border-collapse: collapse; }
+  th { text-align: inherit; }
+}
+
+.app-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   padding: 0;
-  place-items: stretch;
-}
-
-.tenant-shell div.fixed.inset-0.z-50 > :is(form, div),
-.tenant-shell div.fixed.inset-0.z-\[60\] > :is(form, div) {
-  width: 100%;
-  min-height: 100%;
-  max-width: none !important;
-  max-height: none !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  width: calc(100% - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow-y: auto;
-  border-radius: 0 !important;
+  overscroll-behavior: contain;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 24px 80px rgb(15 23 42 / 24%);
 }
+.app-dialog::backdrop { background: rgb(15 23 42 / 50%); backdrop-filter: blur(4px); }
 
-@media (min-width: 1024px) {
-  .tenant-shell div.fixed.inset-0.z-50,
-  .tenant-shell div.fixed.inset-0.z-\[60\] {
-    top: 5rem;
-    right: 0;
-    bottom: 0;
-    left: 18rem;
-    padding: 1.5rem 2rem;
-    background: var(--surface) !important;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-
-  .tenant-shell div.fixed.inset-0.z-50 > :is(form, div),
-  .tenant-shell div.fixed.inset-0.z-\[60\] > :is(form, div) {
-    min-height: 0;
-    border: 1px solid rgb(226 232 240);
-    border-radius: 1.5rem !important;
-    box-shadow: 0 20px 45px rgb(15 23 42 / 8%);
-  }
-}
-
-/* Operational tables retain all columns on small screens without widening the
-   page. They scroll within their own region, which is safer than clipping
-   financial and clinical data or forcing unreadably narrow columns. */
-table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 639px) {

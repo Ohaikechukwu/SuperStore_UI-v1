@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BarChart3, Boxes, Building2, CalendarDays, ChevronDown, ClipboardList, CreditCard, KeyRound,
   FlaskConical, GitBranch, HeartPulse, LayoutDashboard, LogOut, Menu, MessageCircle, Package, Pill, RefreshCw, Settings, ShoppingCart, ShieldCheck, Bell,
@@ -151,6 +151,39 @@ export default function DashboardShell({ children, title, subtitle }: { children
     : routePathname.replace(/^\/t\/[0-9a-f-]+(?=\/|$)/i, "") || "/";
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const navigationRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    if (desktop.matches) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const sidebar = navigationRef.current;
+    const menuButton = menuButtonRef.current;
+    const controls = () => Array.from(sidebar?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)') || [])
+      .filter((element) => element.getClientRects().length > 0);
+    controls()[0]?.focus();
+    const onResize = () => { if (desktop.matches) setOpen(false); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+      if (event.key !== "Tab") return;
+      const items = controls(), first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    desktop.addEventListener("change", onResize);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      desktop.removeEventListener("change", onResize);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (!desktop.matches) menuButton?.focus();
+    };
+  }, [open]);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => ({
     Store: ["/pos", "/products", "/terminal-sessions", "/returns", "/purchasing", "/contacts", "/crm"].some((prefix) => pathname.startsWith(prefix)),
     Inventory: pathname.startsWith("/inventory"),
@@ -174,6 +207,22 @@ export default function DashboardShell({ children, title, subtitle }: { children
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  useEffect(() => {
+    if (!showNotifications) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !notificationsRef.current?.contains(event.target)) setShowNotifications(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setShowNotifications(false); notificationButtonRef.current?.focus(); }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showNotifications]);
+
   const updateSyncState = useCallback((next: SyncState) => {
     setSyncState((current) => sameSyncState(current, next) ? current : next);
   }, []);
@@ -277,8 +326,9 @@ export default function DashboardShell({ children, title, subtitle }: { children
 
   return (
     <div className="tenant-shell min-h-screen bg-slate-50 text-slate-900">
+      <a href="#workspace-content" className="sr-only z-[110] rounded-xl bg-white px-4 py-3 font-semibold text-teal-800 shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to page content</a>
       <SyncManager onStateChange={updateSyncState} />
-      <aside className={cn("fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:translate-x-0", open ? "translate-x-0" : "-translate-x-full")}>
+      <aside id="workspace-navigation" ref={navigationRef} aria-label="Workspace navigation" className={cn("fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:translate-x-0", open ? "visible translate-x-0" : "invisible -translate-x-full lg:visible")}>
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-6">
           <Link suppressHydrationWarning href={isPlatformConsoleRoute ? platformConsoleBase! : tenantWorkspaceBase || "/"} className="flex items-center gap-3" onClick={() => setOpen(false)}>
             {theme?.settings.logo_url ? <img src={theme.settings.logo_url} alt="" className="h-10 w-10 rounded-xl object-cover" /> : <span style={{ backgroundColor: "var(--tenant-primary)" }} className="grid h-10 w-10 place-items-center rounded-xl text-white"><Activity size={21} /></span>}
@@ -288,25 +338,25 @@ export default function DashboardShell({ children, title, subtitle }: { children
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-6">
           <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{isPlatformConsoleRoute ? "Platform" : "Workspace"}</p>
-          <nav className="space-y-1">
-            {visibleNav.map((item) => { const Icon = item.icon; const active = pathname === item.href || pathname.startsWith(`${item.href}/`); const children = item.children?.filter(canSeeNavItem); const expanded = Boolean(children?.length && expandedMenus[item.label]); const href = isPlatformConsoleRoute ? `${platformConsoleBase}${item.href.slice("/platform".length)}` : item.platformOnly ? platformConsolePath() : tenantWorkspacePath(item.href); return <div key={item.href}><div className="flex items-center gap-1"><Link href={href} onClick={() => setOpen(false)} style={active ? { backgroundColor: "color-mix(in srgb, var(--tenant-primary) 10%, white)", color: "var(--tenant-primary)" } : undefined} className={cn("flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition", active ? "" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")}><Icon size={18} strokeWidth={active ? 2.5 : 2} /><span>{item.label}</span>{active && !children?.length && <span style={{ backgroundColor: "var(--tenant-primary)" }} className="ml-auto h-1.5 w-1.5 rounded-full" />}</Link>{children?.length ? <button type="button" onClick={() => setExpandedMenus((current) => ({ ...current, [item.label]: !expanded }))} aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${item.label} menu`} className="rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700"><ChevronDown size={16} className={cn("transition-transform", expanded && "rotate-180")} /></button> : null}</div>{expanded ? <nav className="ml-6 mt-1 space-y-1 border-l border-slate-100 pl-3">{children?.map((child) => { const ChildIcon = child.icon; const childIsActive = pathname === child.href || pathname.startsWith(`${child.href}/`); const childHref = isPlatformConsoleRoute ? `${platformConsoleBase}${child.href.slice("/platform".length)}` : child.platformOnly ? platformConsolePath() : tenantWorkspacePath(child.href); return <Link key={child.href} href={childHref} onClick={() => setOpen(false)} className={cn("flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition", childIsActive ? "bg-teal-50 text-teal-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")}><ChildIcon size={15} /><span>{child.label}</span></Link>; })}</nav> : null}</div>; })}
+          <nav aria-label="Main navigation" className="space-y-1">
+            {visibleNav.map((item) => { const Icon = item.icon; const active = pathname === item.href || pathname.startsWith(`${item.href}/`); const children = item.children?.filter(canSeeNavItem); const expanded = Boolean(children?.length && expandedMenus[item.label]); const href = isPlatformConsoleRoute ? `${platformConsoleBase}${item.href.slice("/platform".length)}` : item.platformOnly ? platformConsolePath() : tenantWorkspacePath(item.href); return <div key={item.href}><div className="flex items-center gap-1"><Link href={href} aria-current={pathname === item.href ? "page" : undefined} onClick={() => setOpen(false)} style={active ? { backgroundColor: "color-mix(in srgb, var(--tenant-primary) 10%, white)", color: "var(--tenant-primary-strong)" } : undefined} className={cn("flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition", active ? "" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")}><Icon size={18} strokeWidth={active ? 2.5 : 2} /><span>{item.label}</span>{active && !children?.length && <span style={{ backgroundColor: "var(--tenant-primary)" }} className="ml-auto h-1.5 w-1.5 rounded-full" />}</Link>{children?.length ? <button type="button" onClick={() => setExpandedMenus((current) => ({ ...current, [item.label]: !expanded }))} aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${item.label} menu`} className="rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700"><ChevronDown size={16} className={cn("transition-transform", expanded && "rotate-180")} /></button> : null}</div>{expanded ? <nav className="ml-6 mt-1 space-y-1 border-l border-slate-100 pl-3">{children?.map((child) => { const ChildIcon = child.icon; const childIsActive = pathname === child.href || pathname.startsWith(`${child.href}/`); const childHref = isPlatformConsoleRoute ? `${platformConsoleBase}${child.href.slice("/platform".length)}` : child.platformOnly ? platformConsolePath() : tenantWorkspacePath(child.href); return <Link key={child.href} href={childHref} aria-current={pathname === child.href ? "page" : undefined} onClick={() => setOpen(false)} className={cn("flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold transition", childIsActive ? "bg-teal-50 text-teal-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")}><ChildIcon size={15} /><span>{child.label}</span></Link>; })}</nav> : null}</div>; })}
           </nav>
         </div>
         <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">{(profile?.full_name || auth?.role || "SH").slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-800">{profile?.full_name || "Loading profile"}</p><p className="truncate text-[11px] capitalize text-slate-500">{profile?.role?.replaceAll("_", " ") || auth?.role?.replaceAll("_", " ") || "Loading access"}</p><p className="truncate text-[10px] text-slate-400">{profile?.email || (connected ? "Connected" : "Offline mode")}</p></div><button onClick={logout} className="rounded-lg p-2 text-slate-400 hover:bg-white hover:text-rose-600" aria-label="Sign out"><LogOut size={16} /></button></div></div>
       </aside>
       {open && <button className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden" onClick={() => setOpen(false)} aria-label="Close navigation" />}
-      <main className="min-h-screen lg:pl-72">
+      <main inert={open} className="min-h-screen lg:pl-72">
         <header className="sticky top-0 z-20 flex min-h-20 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur-xl sm:px-8">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4"><button className="shrink-0 rounded-xl border border-slate-200 p-2 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={19} /></button><div className="min-w-0"><p className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{title}</p>{subtitle && <p className="mt-0.5 hidden truncate text-xs text-slate-500 sm:block">{subtitle}</p>}</div></div>
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4"><button ref={menuButtonRef} aria-expanded={open} aria-controls="workspace-navigation" className="grid size-11 shrink-0 place-items-center rounded-xl border border-slate-200 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={19} /></button><div className="min-w-0"><p className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{title}</p>{subtitle && <p className="mt-0.5 hidden truncate text-xs text-slate-500 sm:block">{subtitle}</p>}</div></div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <span className={cn("hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold xl:flex", syncStyle)}>{connected ? <Wifi size={14} /> : <WifiOff size={14} />}{syncLabel}</span>
-            <button className="hidden min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 lg:flex"><Building2 className="shrink-0" size={15} /><span suppressHydrationWarning data-tenant-brand className="max-w-40 truncate">{theme?.settings.brand_name || theme?.name || "Current workspace"}</span><ChevronDown className="shrink-0" size={14} /></button>
+            <div className="hidden min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 lg:flex"><Building2 className="shrink-0" size={15} /><span suppressHydrationWarning data-tenant-brand className="max-w-40 truncate">{theme?.settings.brand_name || theme?.name || "Current workspace"}</span></div>
             {!isPlatformConsoleRoute && <Link href={messageHref} aria-label="Direct messages" title="Direct messages" className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 shadow-sm transition hover:border-teal-300 hover:text-teal-700"><MessageCircle size={18} />{unreadMessages > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-teal-600 px-1 text-[9px] font-bold text-white">{unreadMessages > 9 ? "9+" : unreadMessages}</span>}</Link>}
-            <div className="relative"><button onClick={() => setShowNotifications((value) => !value)} className="relative rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm" aria-label="Notifications"><Bell size={18}/>{notifications.some((item) => !item.read_at) && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-rose-500" />}</button>{showNotifications && <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"><p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">Notifications</p>{!notifications.length ? <p className="p-3 text-sm text-slate-500">No notifications.</p> : notifications.slice(0, 8).map((item) => <button key={item.id} onClick={() => void markNotificationRead(item.id)} className={cn("block w-full rounded-xl p-3 text-left", !item.read_at && "bg-teal-50")}><p className="truncate text-sm font-bold">{item.title}</p><p className="mt-1 text-xs text-slate-600">{item.message}</p></button>)}</div>}</div>
+            <div ref={notificationsRef} className="relative"><button ref={notificationButtonRef} aria-expanded={showNotifications} aria-controls="workspace-notifications" onClick={() => setShowNotifications((value) => !value)} className="relative rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm" aria-label="Notifications"><Bell size={18}/>{notifications.some((item) => !item.read_at) && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-rose-500" />}</button>{showNotifications && <div id="workspace-notifications" role="region" aria-label="Notifications" className="absolute -right-12 mt-2 max-h-[min(32rem,70dvh)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl sm:right-0 border border-slate-200 bg-white p-3 shadow-xl"><p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">Notifications</p>{!notifications.length ? <p className="p-3 text-sm text-slate-500">No notifications.</p> : notifications.slice(0, 8).map((item) => <button key={item.id} onClick={() => void markNotificationRead(item.id)} className={cn("block w-full rounded-xl p-3 text-left", !item.read_at && "bg-teal-50")}><p className="truncate text-sm font-bold">{item.title}</p><p className="mt-1 text-xs text-slate-600">{item.message}</p></button>)}</div>}</div>
             <div className="flex items-center gap-2 border-l border-slate-200 pl-2 sm:pl-3"><div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-slate-900 text-xs font-bold text-white">{profile?.attributes?.avatar_url ? <img src={String(profile.attributes.avatar_url)} alt={profile.full_name} className="h-full w-full object-cover" /> : (profile?.full_name || "SH").slice(0, 2).toUpperCase()}</div><div className="hidden max-w-32 sm:block"><p className="truncate text-xs font-bold text-slate-800">{profile?.full_name || "Loading profile"}</p><p className="truncate text-[10px] capitalize text-slate-400">{profile?.role?.replaceAll("_", " ") || ""}</p></div></div>
           </div>
         </header>
-        <div className="app-grid min-h-[calc(100vh-5rem)] px-5 py-7 sm:px-8">{children}</div>
+        <div id="workspace-content" tabIndex={-1} className="app-grid min-h-[calc(100vh-5rem)] px-5 py-7 sm:px-8">{children}</div>
       </main>
     </div>
   );
