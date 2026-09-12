@@ -338,7 +338,16 @@ export default function FinancialReports({
               <h2 className="text-lg font-bold">General ledger</h2>
               <button
                 className={button}
-                onClick={() =>
+                onClick={() => {
+                  // Opening balances are as at the day before the activity
+                  // start; label the export rows with that date honestly.
+                  const openingDate = result.from
+                    ? new Date(
+                        new Date(result.from + "T00:00:00Z").getTime() - 86400000,
+                      )
+                        .toISOString()
+                        .slice(0, 10)
+                    : "beginning";
                   exportCsv("general-ledger-" + result.to + ".csv", [
                     [
                       "Account",
@@ -350,7 +359,7 @@ export default function FinancialReports({
                     ],
                     ...Object.entries(result.opening).map(([id, amount]) => [
                       accounts.find((a) => a.id === id)?.name || id,
-                      result.from,
+                      openingDate,
                       "Opening balance",
                       "",
                       "",
@@ -364,8 +373,8 @@ export default function FinancialReports({
                       l.credit,
                       l.balance,
                     ]),
-                  ])
-                }
+                  ]);
+                }}
               >
                 Export ledger CSV
               </button>

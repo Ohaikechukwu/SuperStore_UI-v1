@@ -13,6 +13,7 @@ if (legacyPublicApiUrl === "/edge-api" && !apiUpstream) {
 }
 
 const nextConfig = {
+  output: "standalone",
   async headers() {
     return [{
       source: "/sw.js",

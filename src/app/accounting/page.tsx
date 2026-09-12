@@ -113,6 +113,7 @@ function AccountingWorkspace() {
   } | null>(null);
   const loadAction = useAction();
   const action = useAction();
+  const accountAction = useAction();
   const allowed = (permission: string) => can(context, permission);
   async function load() {
     await loadAction.run(async () => {
@@ -155,6 +156,16 @@ function AccountingWorkspace() {
   async function saved(message = "Accounting record saved.") {
     setNotice(message);
     await load();
+  }
+  function toggleAccount(account: Account) {
+    const activating = !account.active;
+    void accountAction.run(async () => {
+      await api.post(
+        "/api/v1/accounting/accounts/" + account.id + "/" + (activating ? "activate" : "deactivate"),
+        {},
+      );
+      await saved(activating ? "Account reactivated." : "Account deactivated; it can no longer receive postings.");
+    });
   }
   const outstanding = (kind: "payables" | "receivables") =>
     decimal(
@@ -268,6 +279,8 @@ function AccountingWorkspace() {
                   onClick={() => {
                     setTab(key);
                     setSearch("");
+                    // A success banner belongs to the view that produced it.
+                    setNotice("");
                   }}
                 >
                   {label}
@@ -313,7 +326,7 @@ function AccountingWorkspace() {
                   <table className="w-full min-w-[540px] text-left text-sm">
                     <thead className="border-b bg-slate-50 text-xs text-slate-600">
                       <tr>
-                        {["Code", "Account", "Type", "Posting control"].map(
+                        {["Code", "Account", "Type", "Posting control", ""].map(
                           (h) => (
                             <th key={h} scope="col" className="p-3">
                               {h}
@@ -336,6 +349,20 @@ function AccountingWorkspace() {
                                 : a.allow_manual_posting
                                   ? "Manual journals allowed"
                                   : "Source workflow only"}
+                            </td>
+                            <td className="p-3 text-right">
+                              {allowed("accounting.manage") && !a.is_system && (
+                                <button
+                                  className={
+                                    "text-xs font-bold " +
+                                    (a.active ? "text-rose-700" : "text-teal-700")
+                                  }
+                                  disabled={accountAction.busy}
+                                  onClick={() => toggleAccount(a)}
+                                >
+                                  {a.active ? "Deactivate" : "Activate"}
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -564,6 +591,7 @@ function AccountingWorkspace() {
               budgets={data.budgets}
               accounts={data.accounts}
               manage={allowed("accounting.manage")}
+              canApprove={allowed("accounting.approve")}
               reports={allowed("reports.read")}
               changed={saved}
             />
@@ -575,6 +603,9 @@ function AccountingWorkspace() {
             <LedgerControls
               key={
                 data.journals.length +
+                "-" +
+                data.journals.filter((j) => !j.posted || j.approval_status !== "approved")
+                  .length +
                 "-" +
                 data.payables.length +
                 "-" +
@@ -684,6 +715,11 @@ function AccountingWorkspace() {
               }}
             >
               <p className="text-sm font-semibold">{reversing.description}</p>
+              <p className="mt-1 text-xs text-slate-600">
+                {reversing.created_by_user_id === context?.user_id
+                  ? "You raised this journal."
+                  : "Raised by " + (reversing.created_by_user_id || "an unknown user") + "."}
+              </p>
               <Field
                 name="entry_date"
                 label="Reversal date (open period)"

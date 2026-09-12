@@ -62,6 +62,17 @@ export default function JournalEditor({
           throw new Error(
             "Create an open fiscal period covering the journal date first.",
           );
+        // cents() treats malformed input as zero; catch it with an honest
+        // message instead of the generic balance error.
+        const malformed = lines.some(
+          (l) =>
+            (l.debit !== "" && !/^-?\d+(\.\d{0,2})?$/.test(l.debit)) ||
+            (l.credit !== "" && !/^-?\d+(\.\d{0,2})?$/.test(l.credit)),
+        );
+        if (malformed)
+          throw new Error(
+            "Amounts must be numbers with at most two decimal places.",
+          );
         if (debit <= 0 || debit !== credit)
           throw new Error(
             "Debits and credits must match and be greater than zero.",
@@ -83,7 +94,6 @@ export default function JournalEditor({
           description: String(form.get("description")),
           entry_date: date,
           period_id: period.id,
-          requires_approval: true,
           lines: lines.map(({ account_id, debit, credit }) => ({
             account_id,
             debit: debit || "0",

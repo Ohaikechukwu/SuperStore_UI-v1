@@ -31,10 +31,9 @@ import PermissionGate from "@/components/permission-gate";
 import AppSelect from "@/components/app-select";
 import VoidReceiptModal from "@/components/void-receipt-modal";
 import { useToast } from "@/components/toast-provider";
-import { enqueue, pendingCommands, readOfflineSnapshot, saveOfflineSnapshot } from "@/offlineQueue";
 import { api, ApiError } from "@/lib/api";
 import { isConnectionFailure, reportApiReachability, useApiConnectivity } from "@/lib/connectivity";
-import { hasExactProductCode, matchesProductSearch } from "@/lib/product-search";
+import { hasExactProductCode } from "@/lib/product-search";
 import { formatQuantity } from "@/lib/ui";
 import { can, type AuthorizationContext } from "@/lib/authorization";
 
@@ -118,8 +117,6 @@ const defaultWorkPeriod = () => {
   return { start: localDateTime(start), end: localDateTime(new Date(start.getTime() + 8 * 60 * 60 * 1000)) };
 };
 const todayDate = () => localDateTime(new Date()).slice(0, 10);
-const posCatalogSnapshot = (branchId: string) => `pos:catalog:${branchId}`;
-const posSessionSnapshot = (branchId: string) => `pos:session:${branchId}`;
 
 export default function Page() {
   const toast = useToast();
@@ -149,7 +146,6 @@ export default function Page() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const { online } = useApiConnectivity();
-  const [pendingSaleCount, setPendingSaleCount] = useState(0);
   const [isPosting, setIsPosting] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [postedReceipt, setPostedReceipt] = useState<PostedReceipt | null>(null);
@@ -177,6 +173,7 @@ export default function Page() {
   const [showCustomer, setShowCustomer] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const checkoutRequestId = useRef<string | null>(null);
+  const checkoutPayload = useRef<string | null>(null);
   const announcedError = useRef("");
   const announcedNotice = useRef("");
   const refreshSales = useCallback(() => {
@@ -217,6 +214,7 @@ export default function Page() {
   }
   const beginPayment = useCallback(() => {
     if (!cart.length || !branchId) return;
+    if (!online) { setError("Reconnect before taking payment. This browser cannot save sales offline."); return; }
     if (!session) {
       setError("Select an available POS terminal and open your cash session before completing a sale.");
       const period = defaultWorkPeriod();
@@ -263,15 +261,14 @@ export default function Page() {
     }
   }, [branchId, cart, customerId, customerMode, online, session]);
   useEffect(() => {
-    const refreshPendingSales = () => {
-      void pendingCommands().then((commands) => setPendingSaleCount(
-        commands.filter((command) => command.commandType === "sale.create").length,
-      )).catch(() => setPendingSaleCount(0));
+    if (!cart.length && !isPosting) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
     };
-    refreshPendingSales();
-    window.addEventListener("superstore:sync-queue", refreshPendingSales);
-    return () => window.removeEventListener("superstore:sync-queue", refreshPendingSales);
-  }, []);
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [cart.length, isPosting]);
   useEffect(() => {
     if (!error) return;
     if (announcedError.current !== error) {
@@ -310,17 +307,10 @@ export default function Page() {
         if (alive) {
           setBranches(items);
           setBranchId(items[0]?.id || "");
-          void saveOfflineSnapshot("pos:branches", items);
         }
       })
-      .catch(async (caught) => {
-        const cached = await readOfflineSnapshot<Branch[]>("pos:branches");
-        if (!alive) return;
-        if (cached?.length) {
-          setBranches(cached);
-          setBranchId(cached[0].id);
-          setNotice("Showing the last saved POS workspace. Sales will remain queued until reconnection.");
-        } else setError(caught instanceof ApiError ? caught.message : "Open POS once while connected before using it offline.");
+      .catch((caught) => {
+        if (alive) setError(caught instanceof ApiError ? caught.message : "Reconnect to load the POS workspace.");
       })
       .finally(() => alive && setBusy(false));
     return () => {
@@ -384,17 +374,11 @@ export default function Page() {
   useEffect(() => {
     if (!branchId) return;
     let alive = true;
-    if (!online) {
-      void readOfflineSnapshot<CashSession | null>(posSessionSnapshot(branchId)).then((cached) => {
-        if (alive) setSession(cached);
-      });
-      return () => { alive = false; };
-    }
+    if (!online) return () => { alive = false; };
     void api.get<CashSession | null>(`/api/v1/pos/sessions/current?branch_id=${branchId}`)
       .then((current) => {
         if (!alive) return;
         setSession(current);
-        void saveOfflineSnapshot(posSessionSnapshot(branchId), current);
       })
       .catch((caught) => {
         if (!alive) return;
@@ -404,12 +388,6 @@ export default function Page() {
     return () => { alive = false; };
   }, [branchId, online]);
   useEffect(() => {
-    if (!branchId || !online) return;
-    void api.get<Product[]>(`/api/v1/pos/offline-catalog?branch_id=${encodeURIComponent(branchId)}`)
-      .then((items) => saveOfflineSnapshot(posCatalogSnapshot(branchId), items))
-      .catch(() => undefined);
-  }, [branchId, online]);
-  useEffect(() => {
     const term = query.trim();
     if (!branchId || !term) {
       const clear = window.setTimeout(() => setProducts([]), 0);
@@ -417,12 +395,10 @@ export default function Page() {
     }
     let alive = true;
     if (!online) {
-      void readOfflineSnapshot<Product[]>(posCatalogSnapshot(branchId)).then((cached) => {
-        if (!alive) return;
-        if (cached) setProducts(cached.filter((item) => matchesProductSearch(item, term)).slice(0, 18));
-        else setError("No offline POS catalogue is saved for this branch. Reconnect before searching products.");
-      });
-      return () => { alive = false; };
+      const timer = window.setTimeout(() => {
+        if (alive) { setProducts([]); setError("Reconnect before searching products."); }
+      }, 0);
+      return () => { alive = false; window.clearTimeout(timer); };
     }
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ branch_id: branchId, query: term, limit: "18" });
@@ -596,6 +572,7 @@ export default function Page() {
   }
   async function pay(payments: PaymentInput[]) {
     if (!cart.length || !branchId || !session || isPosting) return;
+    if (!online) { setError("Reconnect before submitting payment. Keep this page open to retain the basket."); return; }
     const requestId = checkoutRequestId.current || commandId();
     checkoutRequestId.current = requestId;
     const payload = {
@@ -616,26 +593,16 @@ export default function Page() {
       client_request_id: requestId,
       held_sale_id: heldSaleId,
     };
+    const serializedPayload = JSON.stringify(payload);
+    if (checkoutPayload.current && checkoutPayload.current !== serializedPayload) {
+      setError("A payment is awaiting confirmation. Retry the original basket and payment details before starting another sale.");
+      return;
+    }
+    checkoutPayload.current = serializedPayload;
     const receiptLines = cart;
     const receiptCustomer = customerMode === "returning" ? selectedCustomer?.name || "Customer" : "Walk-in customer";
     setIsPosting(true);
     try {
-      const queueSaleOffline = async () => {
-        // The server is the price authority once a delayed sale reaches it.
-        // Do not present a cached browser price as a price override.
-        const offlinePayload = {
-          ...payload,
-          lines: payload.lines.map(({ product_id, quantity, unit_price }) => unit_price ? ({ product_id, quantity, unit_price }) : ({ product_id, quantity })),
-        };
-        await enqueue({
-          commandId: requestId,
-          commandType: "sale.create",
-          payload: offlinePayload,
-        });
-        setPendingSaleCount((current) => current + 1);
-        setShowPayment(false);
-        setNotice("Sale saved offline. It will be posted in order when connection returns; the server will confirm its final price and stock availability.");
-      };
       if (online) {
         try {
           const result = await api.post<{
@@ -665,12 +632,15 @@ export default function Page() {
           // A lost connection can occur between the heartbeat and checkout.
           // The shared client request ID makes this safe if the server did
           // complete the sale just before its response was lost.
-          if (!isConnectionFailure(caught) && !(caught instanceof ApiError && caught.status >= 500)) throw caught;
+          if (!isConnectionFailure(caught) && !(caught instanceof ApiError && caught.status >= 500)) {
+            // A definitive rejection permits correction with a fresh attempt.
+            checkoutRequestId.current = null;
+            checkoutPayload.current = null;
+            throw caught;
+          }
           reportApiReachability(false);
-          await queueSaleOffline();
+          throw new Error("The sale could not be confirmed. Keep this page open, reconnect, and retry the same payment; an existing sale will be recovered without posting it twice.");
         }
-      } else {
-        await queueSaleOffline();
       }
       setCart([]);
       setDiscount("0"); setDiscountReason(""); setTaxRate("0"); setPriceOverrideReason("");
@@ -681,9 +651,10 @@ export default function Page() {
       setLoyaltyPointsToRedeem("0");
       setHeldSaleId(null);
       checkoutRequestId.current = null;
+      checkoutPayload.current = null;
     } catch (caught) {
       setError(
-        caught instanceof ApiError
+        caught instanceof Error
           ? caught.message
           : "Unable to complete sale.",
       );
@@ -1049,7 +1020,7 @@ export default function Page() {
                     <PauseCircle size={16} /> Hold <span className="hidden sm:inline">sale</span>
                   </button>
                   <button
-                    disabled={!cart.length || isPosting}
+                    disabled={!cart.length || isPosting || !online}
                     onClick={beginPayment}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-500 px-3 py-3 text-sm font-bold text-white transition hover:bg-teal-400 disabled:opacity-40"
                   >
@@ -1059,7 +1030,7 @@ export default function Page() {
                 {heldSaleId && <p className="mt-3 rounded-xl bg-amber-400/10 px-3 py-2 text-center text-xs font-semibold text-amber-200">Resuming a held basket. Stock is checked again at payment.</p>}
                 {!online && (
                   <p className="mt-3 flex items-center justify-center gap-1 text-xs font-semibold text-amber-300">
-                    <WifiOff size={13} /> {pendingSaleCount ? `${pendingSaleCount} sale${pendingSaleCount === 1 ? "" : "s"} waiting to sync` : "Sale will sync later"}
+                    <WifiOff size={13} /> Reconnect to take payment. Sales cannot be saved offline.
                   </p>
                 )}
               </div>

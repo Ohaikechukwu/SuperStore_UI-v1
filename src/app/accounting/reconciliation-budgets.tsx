@@ -445,12 +445,14 @@ export function BudgetPanel({
   budgets,
   accounts,
   manage,
+  canApprove,
   reports,
   changed,
 }: {
   budgets: Budget[];
   accounts: Account[];
   manage: boolean;
+  canApprove: boolean;
   reports: boolean;
   changed: (message?: string) => Promise<void>;
 }) {
@@ -508,7 +510,7 @@ export function BudgetPanel({
                 View variance
               </button>
             )}
-            {manage && b.status === "draft" && (
+            {canApprove && b.status === "draft" && (
               <button className={button} onClick={() => setApproving(b)}>
                 Approve budget
               </button>

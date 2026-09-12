@@ -11,6 +11,7 @@ export type Account = {
   name: string;
   account_type: string;
   active: boolean;
+  is_system: boolean;
   allow_manual_posting: boolean;
   settlement_allowed: boolean;
 };
