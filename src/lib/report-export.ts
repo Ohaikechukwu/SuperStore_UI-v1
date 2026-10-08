@@ -2,7 +2,10 @@
 // Everything is generated in the browser so exports work offline on store
 // nodes and never need a backend round-trip.
 
-import * as XLSX from "xlsx";
+// write-excel-file is used instead of SheetJS's npm package: it writes
+// generated data only (this module never parses untrusted workbooks), and the
+// npm SheetJS build carries unpatched CVE-2023-30533/CVE-2024-22363.
+import writeXlsxFile from "write-excel-file/browser";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -43,18 +46,17 @@ function exportCsv(sections: ReportSection[], fileBase: string) {
   triggerDownload(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${fileBase}.csv`);
 }
 
-function exportXlsx(sections: ReportSection[], fileBase: string) {
-  const workbook = XLSX.utils.book_new();
-  sections.forEach((section, index) => {
-    const sheet = XLSX.utils.aoa_to_sheet([
-      [section.title],
-      section.columns,
-      ...section.rows.map((row) => row.map(safeCell)),
-    ]);
-    const name = (section.title || `Sheet ${index + 1}`).slice(0, 31).replace(/[\\/?*[\]:]/g, " ");
-    XLSX.utils.book_append_sheet(workbook, sheet, name);
-  });
-  XLSX.writeFile(workbook, `${fileBase}.xlsx`);
+async function exportXlsx(sections: ReportSection[], fileBase: string) {
+  await writeXlsxFile(
+    sections.map((section, index) => ({
+      sheet: (section.title || `Sheet ${index + 1}`).slice(0, 31).replace(/[\\/?*[\]:]/g, " "),
+      data: [
+        [section.title],
+        section.columns,
+        ...section.rows.map((row) => row.map(safeCell)),
+      ],
+    })),
+  ).toFile(`${fileBase}.xlsx`);
 }
 
 function exportPdf(sections: ReportSection[], fileBase: string) {
@@ -93,6 +95,6 @@ export function downloadReport(
   if (!sections.length) return;
   const safeBase = fileBase.replace(/[^\w.-]+/g, "-");
   if (format === "csv") exportCsv(sections, safeBase);
-  else if (format === "xlsx") exportXlsx(sections, safeBase);
+  else if (format === "xlsx") void exportXlsx(sections, safeBase);
   else exportPdf(sections, safeBase);
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BarChart3, Boxes, Building2, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, CreditCard, KeyRound,
+  Activity, ArrowRightLeft, BarChart3, Boxes, Building2, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, CreditCard, KeyRound,
   FlaskConical, GitBranch, HeartPulse, LayoutDashboard, LogOut, Menu, MessageCircle, Package, PackagePlus, PackageX, Pill, RefreshCw, Settings, ShoppingCart, ShieldCheck, Bell,
   Monitor, ReceiptText, RotateCcw, Stethoscope, Users, WalletCards, Wifi, WifiOff, X,
 } from "lucide-react";
