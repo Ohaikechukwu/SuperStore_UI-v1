@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import FormSelect from "@/components/form-select";
 import { api } from "@/lib/api";
 import {
+  downloadReport,
+} from "@/lib/report-export";
+import {
   isRecord,
   isAmount,
   accountingCompatibilityMessage,
@@ -152,32 +155,8 @@ function isStatements(value: unknown): value is Statements {
     ["opening", "net_change", "closing"].every((key) => isAmount(cash[key]))
   );
 }
-function exportCsv(name: string, rows: string[][]) {
-  const csv = rows
-    .map((row) =>
-      row
-        .map(
-          (cell) =>
-            '"' +
-            (/^[=+@\t\r]/.test(cell) ||
-            (/^-/.test(cell) && !/^-?\d+(\.\d+)?$/.test(cell))
-              ? "'"
-              : "") +
-            cell.replaceAll('"', '""') +
-            '"',
-        )
-        .join(","),
-    )
-    .join("\r\n");
-  const url = URL.createObjectURL(
-    new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }),
-  );
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+// Exports now go through the shared @/lib/report-export library (CSV, Excel,
+// and PDF) so every accounting report offers the same three formats.
 export default function FinancialReports({
   accounts,
 }: {
@@ -336,48 +315,76 @@ export default function FinancialReports({
           <section className={panel}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-bold">General ledger</h2>
-              <button
-                className={button}
-                onClick={() => {
-                  // Opening balances are as at the day before the activity
-                  // start; label the export rows with that date honestly.
-                  const openingDate = result.from
-                    ? new Date(
-                        new Date(result.from + "T00:00:00Z").getTime() - 86400000,
-                      )
-                        .toISOString()
-                        .slice(0, 10)
-                    : "beginning";
-                  exportCsv("general-ledger-" + result.to + ".csv", [
-                    [
-                      "Account",
-                      "Date",
-                      "Description",
-                      "Debit",
-                      "Credit",
-                      "Balance (debit positive)",
-                    ],
-                    ...Object.entries(result.opening).map(([id, amount]) => [
-                      accounts.find((a) => a.id === id)?.name || id,
-                      openingDate,
-                      "Opening balance",
-                      "",
-                      "",
-                      amount,
-                    ]),
-                    ...result.ledger.map((l) => [
-                      l.account_code + " " + l.account_name,
-                      l.entry_date,
-                      l.description,
-                      l.debit,
-                      l.credit,
-                      l.balance,
-                    ]),
-                  ]);
-                }}
-              >
-                Export ledger CSV
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["csv", "Ledger CSV"],
+                    ["xlsx", "Ledger Excel"],
+                    ["pdf", "Ledger PDF"],
+                  ] as const
+                ).map(([format, label]) => (
+                  <button
+                    key={format}
+                    className={button}
+                    onClick={() => {
+                      if (!result) return;
+                      // Opening balances are as at the day before the
+                      // activity start; the export labels them honestly.
+                      const openingDate = result.from
+                        ? new Date(
+                            new Date(result.from + "T00:00:00Z").getTime() -
+                              86400000,
+                          )
+                            .toISOString()
+                            .slice(0, 10)
+                        : "beginning";
+                      downloadReport(format, "general-ledger-" + result.to, [
+                        {
+                          title: "Opening balances",
+                          columns: [
+                            "Account",
+                            "Date",
+                            "Description",
+                            "Debit",
+                            "Credit",
+                            "Balance (debit positive)",
+                          ],
+                          rows: Object.entries(result.opening).map(
+                            ([id, amount]) => [
+                              accounts.find((a) => a.id === id)?.name || id,
+                              openingDate,
+                              "Opening balance",
+                              "",
+                              "",
+                              amount,
+                            ],
+                          ),
+                        },
+                        {
+                          title: "General ledger",
+                          columns: [
+                            "Date",
+                            "Account / description",
+                            "Debit",
+                            "Credit",
+                            "Balance",
+                          ],
+                          rows: result.ledger.map((l) => [
+                            l.account_code + " " + l.account_name,
+                            l.entry_date,
+                            l.description,
+                            l.debit,
+                            l.credit,
+                            l.balance,
+                          ]),
+                        },
+                      ]);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="mt-2 text-sm text-slate-600">
               Running balances are per account, including opening balances.
@@ -461,23 +468,40 @@ export default function FinancialReports({
                   Closing account balances as at {result.to} · all accounts
                 </p>
               </div>
-              <button
-                className={button}
-                onClick={() =>
-                  exportCsv("trial-balance-" + result.to + ".csv", [
-                    ["Code", "Account", "Debit", "Credit"],
-                    ...result.trial.map((r) => [
-                      r.code,
-                      r.name,
-                      r.debit,
-                      r.credit,
-                    ]),
-                    ["", "Total", total("debit"), total("credit")],
-                  ])
-                }
-              >
-                Export trial balance CSV
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["csv", "Trial balance CSV"],
+                    ["xlsx", "Excel"],
+                    ["pdf", "PDF"],
+                  ] as const
+                ).map(([format, label]) => (
+                  <button
+                    key={format}
+                    className={button}
+                    onClick={() => {
+                      if (!result) return;
+                      downloadReport(format, "trial-balance-" + result.to, [
+                        {
+                          title: "Trial balance as at " + result.to,
+                          columns: ["Code", "Account", "Debit", "Credit"],
+                          rows: [
+                            ...result.trial.map((r) => [
+                              r.code,
+                              r.name,
+                              r.debit,
+                              r.credit,
+                            ]),
+                            ["", "Total", total("debit"), total("credit")],
+                          ],
+                        },
+                      ]);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div
               tabIndex={0}

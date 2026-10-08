@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BarChart3, Boxes, Building2, CalendarDays, ChevronDown, ClipboardList, CreditCard, KeyRound,
-  FlaskConical, GitBranch, HeartPulse, LayoutDashboard, LogOut, Menu, MessageCircle, Package, Pill, RefreshCw, Settings, ShoppingCart, ShieldCheck, Bell,
+  Activity, BarChart3, Boxes, Building2, CalendarDays, ChevronDown, ClipboardCheck, ClipboardList, CreditCard, KeyRound,
+  FlaskConical, GitBranch, HeartPulse, LayoutDashboard, LogOut, Menu, MessageCircle, Package, PackagePlus, PackageX, Pill, RefreshCw, Settings, ShoppingCart, ShieldCheck, Bell,
   Monitor, ReceiptText, RotateCcw, Stethoscope, Users, WalletCards, Wifi, WifiOff, X,
 } from "lucide-react";
 import { apiFetch, clearTenantRoute, clearTokens, platformConsolePath, saveTenantPublicId, tenantLoginPath } from "@/auth";
@@ -31,19 +31,19 @@ const navItems: NavItem[] = [
   { label: "Patient portal", href: "/patient-portal", icon: HeartPulse, permission: "patient.portal.access", module: "hospital", roles: ["patient"], children: [{ label: "Manage appointments", href: "/patient-portal/appointments/manage", icon: CalendarDays, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Book appointment", href: "/patient-portal/appointments", icon: CalendarDays, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "My care", href: "/patient-portal/care", icon: HeartPulse, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Refill requests", href: "/patient-portal/refills", icon: Pill, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Family access", href: "/patient-portal/family", icon: Users, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Documents", href: "/patient-portal/documents", icon: ClipboardList, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Patient wallet", href: "/patient-portal/wallet", icon: WalletCards, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Patient invoices", href: "/patient-portal/invoices", icon: CreditCard, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Secure messages", href: "/patient-portal/messages", icon: HeartPulse, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }, { label: "Profile & privacy", href: "/patient-portal/profile", icon: Settings, permission: "patient.portal.access", module: "hospital", roles: ["patient"] }] },
   { label: "Store", href: "/pos", icon: ShoppingCart, anyPermissions: ["sales.create", "catalog.product.read", "purchasing.read", "cash_sessions.open"], module: "store", children: [
     { label: "Point of sale", href: "/pos", icon: ShoppingCart, permission: "sales.create", module: "store" },
-    { label: "Products", href: "/products", icon: Package, permission: "catalog.product.read", module: "store" },
     { label: "Terminal sessions", href: "/terminal-sessions", icon: Monitor, permission: "cash_sessions.open", module: "store" },
     { label: "Sales returns", href: "/returns", icon: RotateCcw, permission: "sales.refund", module: "store" },
     { label: "Purchasing", href: "/purchasing", icon: ClipboardList, permission: "purchasing.read", module: "store" },
     { label: "Customers & suppliers", href: "/contacts", icon: Users, anyPermissions: ["customers.read", "purchasing.read"], module: "store" },
     { label: "Customer CRM & loyalty", href: "/crm", icon: Users, permission: "crm.read", module: "store" },
   ] },
-  { label: "Inventory", href: "/inventory", icon: Boxes, permission: "inventory.read", module: "inventory", children: [
-    { label: "Inventory overview", href: "/inventory", icon: Boxes, permission: "inventory.read", module: "inventory" },
-  ] },
-  { label: "Stock", href: "/stock", icon: Boxes, permission: "inventory.read", module: "stock", children: [
-    { label: "Stock control", href: "/stock", icon: Boxes, permission: "inventory.read", module: "stock" },
-    { label: "Inventory balances", href: "/inventory", icon: Boxes, permission: "inventory.read", module: "stock" },
+  { label: "Inventory", href: "/inventory", icon: Boxes, anyPermissions: ["inventory.read", "catalog.product.read"], module: "inventory", children: [
+    { label: "Stock overview", href: "/inventory", icon: Boxes, permission: "inventory.read", module: "inventory" },
+    { label: "Product catalogue", href: "/inventory?tab=catalogue", icon: Package, permission: "catalog.product.read", module: "inventory" },
+    { label: "Receive stock", href: "/inventory?tab=receive", icon: PackagePlus, permission: "inventory.read", module: "inventory" },
+    { label: "Transfers", href: "/inventory?tab=transfer", icon: ArrowRightLeft, permission: "inventory.read", module: "inventory" },
+    { label: "Count sheets", href: "/inventory?tab=counts", icon: ClipboardCheck, permission: "inventory.read", module: "inventory" },
+    { label: "Write-offs", href: "/inventory?tab=writeoffs", icon: PackageX, permission: "inventory.read", module: "inventory" },
   ] },
   { label: "Hospital", href: "/hospital", icon: Stethoscope, anyPermissions: ["hospital.patients.read", "hospital.appointments.read", "hospital.lab.read", "pharmacy.prescriptions.read"], module: "hospital", children: [
     { label: "Patient management", href: "/hospital", icon: Users, permission: "hospital.patients.read", module: "hospital" },

@@ -148,6 +148,18 @@ export default function PurchasingPage() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
 
   useEffect(() => {
+    // Deep link from the Inventory workspace: a low-stock row's "Create PO"
+    // pre-fills the product type-ahead so the item is one click away.
+    const reorder = new URLSearchParams(window.location.search).get("reorder");
+    if (!reorder) return;
+    const timer = window.setTimeout(() => {
+      setStockCode(reorder);
+      setNotice(`Reordering "${reorder}" — start the PO, then pick the product in the item search.`);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     void Promise.all([
       api.get<Branch[]>("/api/v1/catalog/branches"),
@@ -487,7 +499,7 @@ export default function PurchasingPage() {
       }
       setQueueVersion((value) => value + 1);
       setReceiveOpen(false);
-      setNotice(`${order.order_number} ${result.status === "received" ? "is fully received" : "is partially received"}. ${money(Number(result.received_total))} was added to inventory.`);
+      setNotice(`${order.order_number} ${result.status === "received" ? "is fully received" : "is partially received"}. ${money(Number(result.received_total))} was added to inventory — stock is live in the Inventory workspace.`);
     } catch (caught) {
       setError(failure(caught, "Unable to receive this stock."));
     } finally {
@@ -633,6 +645,12 @@ export default function PurchasingPage() {
                 <Plus size={16} /> Start another invoice
               </button>
             )}
+            <a
+              href="/inventory?tab=overview"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-bold text-sky-700"
+            >
+              View stock levels
+            </a>
           </div>
           {error && (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">

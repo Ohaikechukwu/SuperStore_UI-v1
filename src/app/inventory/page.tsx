@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import FormSelect from "@/components/form-select";
+import { ProductsPanel } from "../products/ProductsPanel";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -23,6 +25,9 @@ import { enqueue, readOfflineSnapshot, saveOfflineSnapshot } from "@/offlineQueu
 import { api, ApiError } from "@/lib/api";
 import { useApiConnectivity } from "@/lib/connectivity";
 import { matchesProductSearch } from "@/lib/product-search";
+import { downloadStockTemplateXlsx, parseStockWorkbook } from "@/lib/excel-stock";
+import PlatformStockZeroDialog from "@/components/platform-stock-zero-dialog";
+import { loadAuthorizationContext, type AuthorizationContext } from "@/lib/authorization";
 
 type Branch = { id: string; name: string; code: string; active: boolean };
 type Balance = {
@@ -140,6 +145,14 @@ export default function Page() {
   const [importSourceReference, setImportSourceReference] = useState("");
   const [importReason, setImportReason] = useState("");
   const [importing, setImporting] = useState(false);
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
+  const [auth, setAuth] = useState<AuthorizationContext | null>(null);
+  const [stockZeroOpen, setStockZeroOpen] = useState(false);
+
+  useEffect(() => {
+    // The platform stock-zero control is role-gated, not permission-gated.
+    void loadAuthorizationContext().then(setAuth).catch(() => setAuth(null));
+  }, []);
 
   async function load(branch = branchId) {
     setBusy(true);
@@ -253,7 +266,30 @@ export default function Page() {
     setImporting(true);
     setError("");
     try {
-      const items = parseStockCsv(await file.text());
+      let items: BulkStockItem[];
+      if (file.name.toLowerCase().endsWith(".xlsx")) {
+        const parsed = await parseStockWorkbook(file);
+        if (parsed.errors.length) {
+          setError(
+            parsed.errors.slice(0, 5).join(" ") +
+              (parsed.errors.length > 5 ? ` (+${parsed.errors.length - 5} more)` : ""),
+          );
+          return;
+        }
+        items = parsed.items;
+      } else {
+        items = parseStockCsv(await file.text());
+      }
+      if (!items.length) {
+        setError("No stock rows were found in that file.");
+        return;
+      }
+      if (items.length > 12000) {
+        setError(
+          `That file has ${items.length} rows; a single import accepts up to 12,000.`,
+        );
+        return;
+      }
       const result = await api.post<{ received: number }>(
         "/api/v1/inventory/bulk-receive",
         {
@@ -324,6 +360,14 @@ export default function Page() {
               >
                 <ArrowDownToLine size={16} /> Receive one item
               </button>
+              {auth?.role === "platform_super_admin" && (
+                <button
+                  onClick={() => setStockZeroOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-100"
+                >
+                  <Boxes size={16} /> Zero stock (platform)
+                </button>
+              )}
             </div>
           </div>
           {error && (
@@ -336,6 +380,37 @@ export default function Page() {
               {notice}
             </div>
           )}
+          <nav
+            className="flex flex-wrap gap-2"
+            aria-label="Inventory sections"
+          >
+            {(
+              [
+                ["overview", "Overview"],
+                ["catalogue", "Catalogue"],
+                ["receive", "Receive"],
+                ["transfer", "Transfers"],
+                ["counts", "Counts"],
+                ["writeoffs", "Write-offs"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                aria-current={tab === key ? "page" : undefined}
+                onClick={() => setTab(key)}
+                className={
+                  "rounded-xl px-4 py-2.5 text-sm font-semibold " +
+                  (tab === key
+                    ? "bg-teal-700 text-white"
+                    : "text-slate-600 hover:bg-slate-50")
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          {tab === "overview" && (
+          <>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-xs font-semibold text-slate-400">
@@ -445,6 +520,14 @@ export default function Page() {
                             >
                               {outOfStock ? "Out of stock" : low ? "Reorder" : "Healthy"}
                             </span>
+                            {(outOfStock || low) && (
+                              <Link
+                                href={`/purchasing?reorder=${encodeURIComponent(row.stock_code || row.name)}`}
+                                className="ml-2 text-xs font-bold text-teal-700 underline"
+                              >
+                                Create PO
+                              </Link>
+                            )}
                           </td>
                         </tr>
                       );
@@ -454,6 +537,49 @@ export default function Page() {
               </div>
             )}
           </div>
+          <InventoryHealthPanel />
+          </>
+          )}
+          {tab === "catalogue" && <ProductsPanel />}
+          {tab === "receive" && (
+            <section className="rounded-3xl border border-teal-100 bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-bold">Receive stock</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                Record supplier deliveries and opening stock. Receipts posted
+                against a purchase order in Purchasing land here automatically;
+                use these actions for manual or offline receipts.
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <button
+                  onClick={() => setReceiveOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white hover:bg-teal-700"
+                >
+                  <ArrowDownToLine size={16} /> Receive one item
+                </button>
+                <button
+                  onClick={() => {
+                    setImportBranchId(branchId);
+                    setImportSourceReference("");
+                    setImportReason("");
+                    setStockImportOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-bold text-teal-700"
+                >
+                  <FileUp size={16} /> Bulk opening stock
+                </button>
+              </div>
+              <p className="mt-4 text-sm text-slate-500">
+                Buying from a supplier?{" "}
+                <Link href="/purchasing" className="font-bold underline">
+                  Open Purchasing
+                </Link>{" "}
+                — received purchase orders activate stock and prices here.
+              </p>
+            </section>
+          )}
+          {tab === "transfer" && <InventoryTransferPanel />}
+          {tab === "counts" && <InventoryCountPanel />}
+          {tab === "writeoffs" && <InventoryWriteOffPanel />}
           {receiveOpen && (
             <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
               <form
@@ -620,16 +746,24 @@ export default function Page() {
                   Reason / approval note
                   <input value={importReason} onChange={(event) => setImportReason(event.target.value)} minLength={2} required placeholder="Why this opening stock is being loaded" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                 </label>
-                <button
-                  onClick={downloadStockTemplate}
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700"
-                >
-                  <Download size={16} /> Download stock CSV template
-                </button>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button
+                    onClick={downloadStockTemplate}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700"
+                  >
+                    <Download size={16} /> CSV template
+                  </button>
+                  <button
+                    onClick={() => void downloadStockTemplateXlsx()}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700"
+                  >
+                    <Download size={16} /> Excel template
+                  </button>
+                </div>
                 <label className="mt-4 flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-200 p-7 text-center hover:border-teal-400">
                   <Upload size={28} className="text-teal-600" />
                   <span className="mt-3 text-sm font-bold text-slate-700">
-                    {importing ? "Receiving stock…" : "Choose stock CSV"}
+                    {importing ? "Receiving stock…" : "Choose stock .xlsx or .csv"}
                   </span>
                   <span className="mt-1 text-xs text-slate-500">
                     stock code, quantity, unit cost, batch, expiry
@@ -637,7 +771,7 @@ export default function Page() {
                   <input
                     disabled={!importBranchId || !importSourceReference.trim() || !importReason.trim() || importing}
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     onChange={importStock}
                     className="sr-only"
                   />
@@ -648,7 +782,15 @@ export default function Page() {
           <InventoryTransferPanel />
           <InventoryCountPanel />
           <InventoryWriteOffPanel />
-          <InventoryHealthPanel />
+          {stockZeroOpen && auth?.role === "platform_super_admin" && (
+            <PlatformStockZeroDialog
+              tenant={{ id: auth.tenant_id }}
+              onClose={() => {
+                setStockZeroOpen(false);
+                void load();
+              }}
+            />
+          )}
         </div>
       </PermissionGate>
     </DashboardShell>
