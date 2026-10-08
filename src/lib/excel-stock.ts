@@ -5,8 +5,10 @@ import writeXlsxFile from "write-excel-file/browser";
 
 export type BulkStockItem = {
   stock_code: string;
+  name: string | null;
   quantity: string;
   unit_cost: string;
+  selling_price: string | null;
   batch_number: string | null;
   expiry_date: string | null;
 };
@@ -17,11 +19,19 @@ const HEADER_ALIASES: Record<string, string> = {
   sku: "stock_code",
   item_code: "stock_code",
   product_code: "stock_code",
+  name: "name",
+  product_name: "name",
+  item_name: "name",
+  product: "name",
   quantity: "quantity",
   qty: "quantity",
   unit_cost: "unit_cost",
   cost: "unit_cost",
+  cost_price: "unit_cost",
   unit_price: "unit_cost",
+  selling_price: "selling_price",
+  sale_price: "selling_price",
+  price: "selling_price",
   batch_number: "batch_number",
   batch: "batch_number",
   batch_no: "batch_number",
@@ -78,17 +88,14 @@ export async function parseStockWorkbook(
     const canonical = HEADER_ALIASES[normalizeHeader(header)];
     if (canonical && !columns.has(canonical)) columns.set(canonical, position);
   });
-  const missing = ["stock_code", "quantity", "unit_cost"].filter(
-    (name) => !columns.has(name),
-  );
-  if (missing.length) {
+  // stock_code becomes optional when a name column can create new products.
+  const missing = ["quantity", "unit_cost"].filter((name) => !columns.has(name));
+  if (missing.length || (!columns.has("stock_code") && !columns.has("name"))) {
     return {
       items: [],
       errors: [
-        `The spreadsheet is missing the ${missing.join(", ")} column(s). Found: ${populated[0]
-          .map(asText)
-          .filter(Boolean)
-          .join(", ")}.`,
+        `The spreadsheet needs a stock_code (or name) column plus ${missing.length ? "the " + missing.join(", ") + " column(s)." : ""}`.trim() +
+          ` Found: ${populated[0].map(asText).filter(Boolean).join(", ")}.`,
       ],
     };
   }
@@ -96,15 +103,17 @@ export async function parseStockWorkbook(
 
   const errors: string[] = [];
   const firstRowByCode = new Map<string, number>();
+  const firstRowByName = new Map<string, number>();
   const items: BulkStockItem[] = [];
   populated.slice(1).forEach((row, position) => {
     // +2: one-based sheet rows, plus the header row.
     const excelRow = position + 2;
     const stockCode = asText(cell(row, "stock_code")).toUpperCase();
+    const name = columns.has("name") ? asText(cell(row, "name")) || null : null;
     const quantity = Number(cell(row, "quantity"));
     const unitCost = Number(cell(row, "unit_cost"));
-    if (!stockCode) {
-      errors.push(`Excel row ${excelRow}: stock code is empty.`);
+    if (!stockCode && !name) {
+      errors.push(`Excel row ${excelRow}: needs a stock code or a product name.`);
       return;
     }
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -114,6 +123,15 @@ export async function parseStockWorkbook(
     if (!Number.isFinite(unitCost) || unitCost < 0) {
       errors.push(`Excel row ${excelRow}: unit cost must be a number, zero or more.`);
       return;
+    }
+    let sellingPrice: string | null = null;
+    if (columns.has("selling_price")) {
+      const parsed = Number(cell(row, "selling_price"));
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        errors.push(`Excel row ${excelRow}: selling price must be a number, zero or more.`);
+        return;
+      }
+      sellingPrice = String(parsed);
     }
     const batchNumber = asText(cell(row, "batch_number")) || null;
     const expiryText = asText(cell(row, "expiry_date"));
@@ -128,18 +146,32 @@ export async function parseStockWorkbook(
         return;
       }
     }
-    const earlier = firstRowByCode.get(stockCode);
-    if (earlier) {
-      errors.push(
-        `Excel row ${excelRow}: stock code ${stockCode} appears more than once (first on row ${earlier}).`,
-      );
-      return;
+    if (stockCode) {
+      const earlier = firstRowByCode.get(stockCode);
+      if (earlier) {
+        errors.push(
+          `Excel row ${excelRow}: stock code ${stockCode} appears more than once (first on row ${earlier}).`,
+        );
+        return;
+      }
+      firstRowByCode.set(stockCode, excelRow);
+    } else {
+      const nameKey = (name as string).trim().toLowerCase();
+      const earlier = firstRowByName.get(nameKey);
+      if (earlier) {
+        errors.push(
+          `Excel row ${excelRow}: product name appears more than once (first on row ${earlier}).`,
+        );
+        return;
+      }
+      firstRowByName.set(nameKey, excelRow);
     }
-    firstRowByCode.set(stockCode, excelRow);
     items.push({
       stock_code: stockCode,
+      name,
       quantity: String(quantity),
       unit_cost: String(unitCost),
+      selling_price: sellingPrice,
       batch_number: batchNumber,
       expiry_date: expiryText ? (asIsoDate(cell(row, "expiry_date")) as string) : null,
     });
@@ -148,11 +180,11 @@ export async function parseStockWorkbook(
   return { items, errors: [] };
 }
 
-/** Download an .xlsx template matching the parser and the bulk-receive API. */
+/** Download an .xlsx template matching the parser and the upsert API. */
 export async function downloadStockTemplateXlsx() {
   await writeXlsxFile([
-    ["stock_code", "quantity", "unit_cost", "batch_number", "expiry_date"],
-    ["PARA999", 100, 900, "BATCH-001", "2028-12-31"],
-    ["STORE001", 50, 500, "", ""],
+    ["stock_code", "name", "quantity", "unit_cost", "selling_price", "batch_number", "expiry_date"],
+    ["PARA999", "Paracetamol 500mg", 100, 900, 1400, "BATCH-001", "2028-12-31"],
+    ["", "New product without a code", 50, 500, 900, "", ""],
   ]).toFile("opening-stock-template.xlsx");
 }

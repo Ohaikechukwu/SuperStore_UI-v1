@@ -41,8 +41,10 @@ type Balance = {
 };
 type BulkStockItem = {
   stock_code: string;
+  name: string | null;
   quantity: string;
   unit_cost: string;
+  selling_price: string | null;
   batch_number: string | null;
   expiry_date: string | null;
 };
@@ -122,8 +124,10 @@ function parseStockCsv(text: string): BulkStockItem[] {
       );
     return {
       stock_code: stockCode,
+      name: null,
       quantity: String(quantity),
       unit_cost: String(unitCost),
+      selling_price: null,
       batch_number: batch,
       expiry_date: expiry,
     };
@@ -290,8 +294,12 @@ export default function Page() {
         );
         return;
       }
-      const result = await api.post<{ received: number }>(
-        "/api/v1/inventory/bulk-receive",
+      const result = await api.post<{
+        received: number;
+        created_products: string[];
+        price_updates: unknown[];
+      }>(
+        "/api/v1/inventory/upsert",
         {
           branch_id: importBranchId,
           items,
@@ -300,7 +308,14 @@ export default function Page() {
         },
       );
       setNotice(
-        `${result.received} stock lines received into the selected branch.`,
+        `${result.received} stock line${result.received === 1 ? "" : "s"} received into the selected branch` +
+          (result.created_products.length
+            ? ` · ${result.created_products.length} new product${result.created_products.length === 1 ? "" : "s"} created`
+            : "") +
+          (result.price_updates.length
+            ? ` · ${result.price_updates.length} price update${result.price_updates.length === 1 ? "" : "s"}`
+            : "") +
+          ".",
       );
       setStockImportOpen(false);
       setImportSourceReference("");
@@ -712,8 +727,10 @@ export default function Page() {
                       Receive many items at once
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      Choose the branch once, then upload stock code, quantity,
-                      cost, batch, and expiry for up to 12,000 items.
+                      Choose the branch once, then upload stock code or name,
+                      quantity, cost, and selling price. Missing products are
+                      created, stock is added as new costed batches, and prices
+                      are updated from the sheet.
                     </p>
                   </div>
                   <button
@@ -766,7 +783,7 @@ export default function Page() {
                     {importing ? "Receiving stock…" : "Choose stock .xlsx or .csv"}
                   </span>
                   <span className="mt-1 text-xs text-slate-500">
-                    stock code, quantity, unit cost, batch, expiry
+                    stock code or name, quantity, unit cost, selling price, batch, expiry
                   </span>
                   <input
                     disabled={!importBranchId || !importSourceReference.trim() || !importReason.trim() || importing}
