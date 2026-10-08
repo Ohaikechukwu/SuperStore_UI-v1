@@ -141,10 +141,8 @@ export async function parseStockWorkbook(
         errors.push(`Excel row ${excelRow}: expiry date "${expiryText}" is not a date.`);
         return;
       }
-      if (!batchNumber) {
-        errors.push(`Excel row ${excelRow}: needs a batch number when an expiry date is supplied.`);
-        return;
-      }
+      // A batch number is no longer required with an expiry: the server
+      // assigns one when the sheet leaves it blank.
     }
     if (stockCode) {
       const earlier = firstRowByCode.get(stockCode);
@@ -180,11 +178,12 @@ export async function parseStockWorkbook(
   return { items, errors: [] };
 }
 
-/** Download an .xlsx template matching the parser and the upsert API. */
+/** Download an .xlsx template matching the parser and the upsert API.
+ * Batch numbers are system-assigned, so the template omits the column. */
 export async function downloadStockTemplateXlsx() {
   await writeXlsxFile([
-    ["stock_code", "name", "quantity", "unit_cost", "selling_price", "batch_number", "expiry_date"],
-    ["PARA999", "Paracetamol 500mg", 100, 900, 1400, "BATCH-001", "2028-12-31"],
-    ["", "New product without a code", 50, 500, 900, "", ""],
+    ["stock_code", "name", "quantity", "unit_cost", "selling_price", "expiry_date"],
+    ["PARA999", "Paracetamol 500mg", 100, 900, 1400, "2028-12-31"],
+    ["", "New product without a code", 50, 500, 900, ""],
   ]).toFile("opening-stock-template.xlsx");
 }

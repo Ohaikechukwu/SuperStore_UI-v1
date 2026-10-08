@@ -220,7 +220,8 @@ export default function Page() {
       branch_id: String(form.get("branch_id")),
       product_id: String(form.get("product_id")),
       quantity: String(form.get("quantity")),
-      batch_number: String(form.get("batch_number") || "") || null,
+      // Batch numbers are assigned by the system at receive time.
+      batch_number: null,
       expiry_date: String(form.get("expiry_date") || "") || null,
       unit_cost: String(form.get("unit_cost") || "") || null,
       source_reference: String(form.get("source_reference") || ""),
@@ -679,14 +680,7 @@ export default function Page() {
                     </FormSelect>
                   </label>
                   <label className="text-xs font-bold text-slate-600">
-                    Batch number
-                    <input
-                      name="batch_number"
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="text-xs font-bold text-slate-600">
-                    Expiry date
+                    Expiry date (optional — a batch number is assigned automatically)
                     <input
                       name="expiry_date"
                       type="date"

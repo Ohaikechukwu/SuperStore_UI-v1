@@ -139,7 +139,6 @@ export default function PurchasingPage() {
   const [unit, setUnit] = useState("unit");
   const [reorderLevel, setReorderLevel] = useState("0");
   const [controlled, setControlled] = useState(false);
-  const [batchNumber, setBatchNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [queueVersion, setQueueVersion] = useState(0);
@@ -247,7 +246,6 @@ export default function PurchasingPage() {
     setUnit("unit");
     setReorderLevel("0");
     setControlled(false);
-    setBatchNumber("");
     setExpiryDate("");
     setItemOpen(false);
   }
@@ -360,7 +358,8 @@ export default function PurchasingPage() {
           unit,
           reorder_level: Number(reorderLevel || 0),
           controlled,
-          batch_number: batchNumber.trim() || null,
+          // Batch numbers are assigned by the system at receive time.
+          batch_number: null,
           expiry_date: expiryDate || null,
         },
       );
@@ -1080,8 +1079,6 @@ export default function PurchasingPage() {
           setReorderLevel={setReorderLevel}
           controlled={controlled}
           setControlled={setControlled}
-          batchNumber={batchNumber}
-          setBatchNumber={setBatchNumber}
           expiryDate={expiryDate}
           setExpiryDate={setExpiryDate}
           itemName={itemName}
@@ -1138,9 +1135,6 @@ function ReceivePurchaseOrderModal({
       ]),
     ),
   );
-  const [batchNumbers, setBatchNumbers] = useState<Record<string, string>>(() =>
-    Object.fromEntries(order.lines.map((line) => [line.id, line.batch_number || ""])),
-  );
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>(() =>
     Object.fromEntries(order.lines.map((line) => [line.id, line.expiry_date || ""])),
   );
@@ -1152,16 +1146,13 @@ function ReceivePurchaseOrderModal({
       .map((line) => ({
         line_id: line.id,
         quantity: quantities[line.id] || "0",
-        batch_number: batchNumbers[line.id]?.trim() || null,
+        // Batch numbers are system-assigned server-side; only expiry is entered.
+        batch_number: null,
         expiry_date: expiryDates[line.id] || null,
       }))
       .filter((line) => Number(line.quantity) > 0);
     if (!lines.length) {
       setLocalError("Enter a positive quantity for at least one delivered item.");
-      return;
-    }
-    if (lines.some((line) => line.expiry_date && !line.batch_number)) {
-      setLocalError("Enter a batch number for every receipt line with an expiry date.");
       return;
     }
     setLocalError("");
@@ -1209,7 +1200,7 @@ function ReceivePurchaseOrderModal({
                 <th className="px-4 py-3">Already received</th>
                 <th className="px-4 py-3">Outstanding</th>
                 <th className="px-4 py-3">Receive now</th>
-                <th className="px-4 py-3">Actual batch / expiry</th>
+                <th className="px-4 py-3">Expiry date (optional)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1245,7 +1236,7 @@ function ReceivePurchaseOrderModal({
                         className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
                       />
                     </td>
-                    <td className="px-4 py-3"><div className="grid gap-2 sm:grid-cols-2"><input aria-label={`Batch number for ${line.product_name}`} value={batchNumbers[line.id] || ""} disabled={busy || outstanding === 0} onChange={(event) => setBatchNumbers((current) => ({ ...current, [line.id]: event.target.value }))} placeholder="Batch" className="min-w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" /><input aria-label={`Expiry date for ${line.product_name}`} type="date" value={expiryDates[line.id] || ""} disabled={busy || outstanding === 0} onChange={(event) => setExpiryDates((current) => ({ ...current, [line.id]: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" /></div></td>
+                    <td className="px-4 py-3"><input aria-label={`Expiry date for ${line.product_name}`} type="date" value={expiryDates[line.id] || ""} disabled={busy || outstanding === 0} onChange={(event) => setExpiryDates((current) => ({ ...current, [line.id]: event.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50" /></td>
                   </tr>
                 );
               })}
@@ -1642,8 +1633,6 @@ function InventoryDetailsModal(props: {
   setReorderLevel: (value: string) => void;
   controlled: boolean;
   setControlled: (value: boolean) => void;
-  batchNumber: string;
-  setBatchNumber: (value: string) => void;
   expiryDate: string;
   setExpiryDate: (value: string) => void;
   itemName: string;
@@ -1780,14 +1769,7 @@ function InventoryDetailsModal(props: {
               onChange={(event) => props.setReorderLevel(event.target.value)}
             />
           </Field>
-          <Field label="Batch number">
-            <input
-              value={props.batchNumber}
-              onChange={(event) => props.setBatchNumber(event.target.value)}
-              placeholder="Required if entering expiry"
-            />
-          </Field>
-          <Field label="Expiry date">
+          <Field label="Expiry date (optional)">
             <input
               type="date"
               value={props.expiryDate}
